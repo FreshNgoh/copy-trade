@@ -1,0 +1,1 @@
+self.__NEXT_FONT_MANIFEST="{\"pages\":{},\"app\":{\"/Users/ngoh/test-copytrade/test-copytrade/frontend/src/app/layout\":[\"static/media/26d4368bf94c0ec4-s.p.woff2\",\"static/media/558ca1a6aa3cb55e-s.p.woff2\",\"static/media/29b98dbfba401fa9-s.p.woff2\"]},\"appUsingSizeAdjust\":true,\"pagesUsingSizeAdjust\":false}"
