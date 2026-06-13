@@ -1,18 +1,17 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { cn } from '@/lib/utils';
-import { Activity, Bell, Search } from 'lucide-react';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { cn } from "@/lib/utils";
+import { Activity, Bell, Search } from "lucide-react";
 
 const NAV = [
-  { href: '/', label: 'Home' },
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/explore', label: 'Explore' },
-  { href: '/trade', label: 'Trade' },
-  { href: '/become-trader', label: 'Become a Trader' },
-  { href: '/admin', label: 'Admin' },
+  { href: "/", label: "Home" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/explore", label: "Explore" },
+  { href: "/trade", label: "Trade" },
+  { href: "/become-trader", label: "Become a Trader" },
 ];
 
 export function Navbar() {
@@ -35,7 +34,7 @@ export function Navbar() {
             </div>
             <span
               className="font-heading text-base font-bold tracking-tighter"
-              style={{ fontFamily: 'var(--font-unbounded)' }}
+              style={{ fontFamily: "var(--font-unbounded)" }}
             >
               ALPHAVAULT
             </span>
@@ -47,15 +46,17 @@ export function Navbar() {
           <div className="hidden lg:flex items-center gap-1">
             {NAV.map((item) => {
               const active =
-                item.href === '/' ? pathname === '/' : pathname?.startsWith(item.href);
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname?.startsWith(item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  data-testid={`nav-link-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  data-testid={`nav-link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                   className={cn(
-                    'relative px-3 py-1.5 text-sm font-medium transition-colors hover:text-white',
-                    active ? 'text-white' : 'text-muted-foreground'
+                    "relative px-3 py-1.5 text-sm font-medium transition-colors hover:text-white",
+                    active ? "text-white" : "text-muted-foreground",
                   )}
                 >
                   {item.label}
@@ -75,7 +76,9 @@ export function Navbar() {
           >
             <Search className="w-3.5 h-3.5" />
             <span className="font-mono">Search traders</span>
-            <span className="font-mono text-[10px] border border-border px-1 ml-2">⌘K</span>
+            <span className="font-mono text-[10px] border border-border px-1 ml-2">
+              ⌘K
+            </span>
           </button>
           <button
             data-testid="nav-notifications"
@@ -88,7 +91,7 @@ export function Navbar() {
             <ConnectButton
               showBalance={false}
               chainStatus="icon"
-              accountStatus={{ smallScreen: 'avatar', largeScreen: 'full' }}
+              accountStatus={{ smallScreen: "avatar", largeScreen: "full" }}
             />
           </div>
         </div>

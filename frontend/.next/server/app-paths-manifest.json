@@ -1,8 +1,0 @@
-{
-  "/page": "app/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/trade/page": "app/trade/page.js",
-  "/explore/page": "app/explore/page.js",
-  "/become-trader/page": "app/become-trader/page.js",
-  "/traders/[address]/page": "app/traders/[address]/page.js"
-}
