@@ -33,9 +33,9 @@ export function PairSelector({ pairs, activePair, setActivePair }) {
         align="start"
         side="bottom"
         sideOffset={30}
-        className="w-[420px] h-[70vh] p-0 bg-surface border-border text-white"
+        className="w-[420px] h-[640px] p-0 bg-surface border-border text-white"
       >
-        <Command className="bg-surface h-full">
+        <Command className="bg-surface h-[640px]">
           <CommandInput placeholder="Search coin, e.g. BTC or ETH" />
 
           <CommandList>

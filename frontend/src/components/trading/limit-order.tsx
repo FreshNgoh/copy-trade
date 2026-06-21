@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
-import { formatDateTime } from "@/lib/date";
+import { formatDateTime } from "@/lib/format-date";
 import {
   AlertDialog,
   AlertDialogAction,
