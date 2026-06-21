@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { normalizeTradingViewSymbol } from "@/lib/binance";
+import { normalizeTradingViewSymbol } from "@/lib/trading/binance";
 
 const SCRIPT_ID = "tradingview-widget-script";
 const SCRIPT_SRC = "https://s3.tradingview.com/tv.js";

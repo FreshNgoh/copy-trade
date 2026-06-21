@@ -22,7 +22,7 @@ export function Navbar() {
       data-testid="primary-navbar"
       className="fixed top-0 left-0 right-0 z-50 glass border-b border-border"
     >
-      <div className="max-w-[1600px] mx-auto h-16 px-6 flex items-center justify-between gap-6">
+      <div className="max-w-[1600px] mx-auto h-16 px-2 flex items-center justify-between gap-6">
         <div className="flex items-center gap-10">
           <Link
             href="/"

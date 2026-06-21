@@ -1,3 +1,32 @@
+# Copy Trade
+
+## Supabase setup
+
+1. Create a Supabase project.
+2. In Supabase, open SQL Editor and run `supabase-trader-profiles.sql`.
+3. Add your Supabase values to `backend/.env`:
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+SUPABASE_SECRET_KEY=your-secret-key
+SUPABASE_JWKS_URL=https://your-project.supabase.co/auth/v1/.well-known/jwks.json
+```
+
+4. Start the frontend:
+
+```bash
+cd frontend
+yarn dev
+```
+
+The backend-owned trader profile request handlers live in `backend/supabaseCrud.js`.
+They use `withSupabase` from `@supabase/server`, so normal requests go through
+`ctx.supabase` with RLS and admin/server-to-server requests can use
+`ctx.supabaseAdmin`.
+
+## Original notes
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).

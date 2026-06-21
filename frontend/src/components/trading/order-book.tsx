@@ -1,7 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { BINANCE_TESTNET_BASE, normalizeBinanceSymbol } from "@/lib/binance";
+import {
+  BINANCE_TESTNET_BASE,
+  normalizeBinanceSymbol,
+} from "@/lib/trading/binance";
 
 interface OrderLevel {
   price: number;
