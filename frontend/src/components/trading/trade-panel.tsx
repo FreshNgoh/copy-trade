@@ -12,9 +12,13 @@ import { calculateTradeMetrics } from "@/lib/trading/calculation";
 export function TradePanel({
   pair,
   midPrice,
+  onPositionCreated,
+  onOrderCreated,
 }: {
   pair?: string;
   midPrice: number;
+  onPositionCreated?: () => void;
+  onOrderCreated?: () => void;
 }) {
   const { address, isConnected } = useAccount();
   const [direction, setDirection] = React.useState<"BUY" | "SELL">("BUY");
@@ -53,6 +57,7 @@ export function TradePanel({
       toast.success("Position Created", {
         description: `${direction} ${quantity} ${pair}`,
       });
+      await onPositionCreated();
 
       // Reset input
       setQuantity("");
@@ -87,6 +92,8 @@ export function TradePanel({
       toast.success("Order Created", {
         description: `${direction} ${quantity} ${pair}`,
       });
+
+      await onOrderCreated();
 
       // Reset input
       setLimitPrice(midPrice.toString());

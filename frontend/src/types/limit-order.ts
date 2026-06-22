@@ -24,8 +24,8 @@ export interface LimitOrder {
   stop_loss: number | null;
   take_profit: number | null;
   status: "PENDING" | "PARTIALLY_FILLED" | "FILLED" | "CANCELLED" | "EXPIRED";
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CancelLimitOrder {

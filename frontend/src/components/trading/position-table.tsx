@@ -21,7 +21,7 @@ export function PositionsTable({
   activePair,
   setActivePositions,
   setClosedPositions,
-}: any) {
+}) {
   const [openTPSL, setOpenTPSL] = React.useState(false);
   const [selectedPosition, setSelectedPosition] = React.useState(null);
 
@@ -60,7 +60,7 @@ export function PositionsTable({
                 await closePositionApi({
                   position_id: p.position_id,
                   closing_price: markPrice,
-                  updated_at: new Date(),
+                  updated_at: new Date().toISOString(),
                   status: "CLOSED",
                   Pnl: pnl,
                   Roi: roi,

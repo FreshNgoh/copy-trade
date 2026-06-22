@@ -1,8 +1,13 @@
 import { formatDateTime } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
+import { ClosedPosition } from "@/types/position";
 
-export function HistoryTable({ closedPositions }: any) {
+export function HistoryTable({
+  closedPositions,
+}: {
+  closedPositions: ClosedPosition[];
+}) {
   return closedPositions.length === 0 ? (
     <EmptyState text="No trade history" />
   ) : (

@@ -1,3 +1,19 @@
+export interface Position {
+  position_id: string;
+  trader_wallet_address: string;
+  symbol: string;
+  quantity: number;
+  direction: "LONG" | "SHORT";
+  entry_price: number;
+  leverage: number;
+  stop_loss: number | null;
+  take_profit: number | null;
+  liquidation_price: number;
+  status: "OPEN" | "CLOSED" | "CANCELLED" | "LIQUIDATED";
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CreatePositionDTO {
   order_id?: string;
   trader_wallet_address: string;
@@ -8,16 +24,27 @@ export interface CreatePositionDTO {
   leverage: number;
   stop_loss: number | null;
   take_profit: number | null;
-  created_at?: Date;
-  updated_at?: Date;
-  status?: "OPEN" | "CLOSED" | "CANCELLED" | "LIQUIDATED";
-  liquidation_price?: number;
 }
 
-export interface ClosePosition {
+export interface ClosedPosition {
+  position_id: string;
+  symbol: string;
+  quantity: number;
+  direction: "LONG" | "SHORT";
+  entry_price: number;
+  closing_price: number;
+  leverage: number;
+  Pnl: number;
+  Roi: number;
+  created_at: string;
+  updated_at: string;
+  status: "CLOSED";
+}
+
+export interface ClosePositionDTO {
   position_id: string;
   closing_price: number;
-  updated_at: Date;
+  updated_at: string;
   status: "OPEN" | "CLOSED";
   Pnl: number;
   Roi: number;

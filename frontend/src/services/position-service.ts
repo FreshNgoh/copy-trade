@@ -1,6 +1,6 @@
 import { positionRepository } from "@/repositories/position-repository";
 import type {
-  ClosePosition,
+  ClosePositionDTO,
   CreatePositionDTO,
   UpdatePosition,
 } from "@/types/position";
@@ -21,7 +21,7 @@ export async function getOpenPositions() {
   return positionRepository.getOpenPositions();
 }
 
-export async function closePosition(position: ClosePosition) {
+export async function closePosition(position: ClosePositionDTO) {
   return positionRepository.closePosition(position);
 }
 

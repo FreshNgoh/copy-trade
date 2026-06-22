@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { updateActivePositionsApi } from "@/lib/api/position-api";
+import { Position, UpdatePosition } from "@/types/position";
 
 export function TPSLModal({
   open,
@@ -19,6 +20,12 @@ export function TPSLModal({
   position,
   onUpdated,
   midPrice,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  position: Position;
+  onUpdated: (position: UpdatePosition) => void;
+  midPrice: number;
 }) {
   const [takeProfit, setTakeProfit] = React.useState("");
   const [stopLoss, setStopLoss] = React.useState("");
@@ -35,7 +42,7 @@ export function TPSLModal({
     try {
       setLoading(true);
 
-      const updateTPSL = await updateActivePositionsApi({
+      const updateTPSL: UpdatePosition = await updateActivePositionsApi({
         position_id: position.position_id,
         take_profit: takeProfit ? Number(takeProfit) : null,
         stop_loss: stopLoss ? Number(stopLoss) : null,

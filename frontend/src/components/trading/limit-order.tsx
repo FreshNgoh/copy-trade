@@ -14,9 +14,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { cancelOrderApi } from "@/lib/api/order-api";
+import type { LimitOrder } from "@/types/limit-order";
 
-export function LimitOrder({ orderPosition, setActiveOrders }) {
-  const handleCancelOrder = async (order) => {
+export function LimitOrder({
+  orderPosition,
+  setActiveOrders,
+}: {
+  orderPosition: LimitOrder[];
+  setActiveOrders: (position) => void;
+}) {
+  const handleCancelOrder = async (order: LimitOrder) => {
     console.log(order);
     try {
       await cancelOrderApi({
@@ -26,7 +33,7 @@ export function LimitOrder({ orderPosition, setActiveOrders }) {
       });
 
       // refresh positions
-      setActiveOrders((prev) =>
+      setActiveOrders((prev: LimitOrder[]) =>
         prev.filter((o) => o.order_id !== order.order_id),
       );
 

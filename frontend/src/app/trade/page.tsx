@@ -11,7 +11,6 @@ import { PositionsTable } from "@/components/trading/position-table";
 import { HistoryTable } from "@/components/trading/trade-history";
 import { LimitOrder } from "@/components/trading/limit-order";
 import { getLimitOrdersApi } from "@/lib/api/order-api";
-import { ChevronDown } from "lucide-react";
 import { PairSelector } from "@/components/trading/pair-selector";
 
 const INITIAL_PAIRS = [
@@ -52,7 +51,6 @@ async function fetchAllTickers() {
 
 export default function TradePage() {
   const [pairs, setPairs] = React.useState(INITIAL_PAIRS);
-  const [pairOpen, setPairOpen] = React.useState(false);
   const [activePair, setActivePair] = React.useState(INITIAL_PAIRS[1]);
   const [tab, setTab] = React.useState<"positions" | "orders" | "history">(
     "positions",
@@ -61,16 +59,16 @@ export default function TradePage() {
   const [closedPositions, setClosedPositions] = React.useState([]);
   const [orderPositions, setOrderPositions] = React.useState([]);
 
-  React.useEffect(() => {
-    const loadPositions = async () => {
-      try {
-        const positions = await getPositionsApi();
-        setActivePositions(positions);
-      } catch (error) {
-        console.error("Failed to fetch positions:", error);
-      }
-    };
+  const loadPositions = async () => {
+    try {
+      const positions = await getPositionsApi();
+      setActivePositions(positions);
+    } catch (error) {
+      console.error("Failed to fetch positions:", error);
+    }
+  };
 
+  React.useEffect(() => {
     loadPositions();
   }, []);
 
@@ -106,16 +104,16 @@ export default function TradePage() {
     loadTradeHistory();
   }, []);
 
-  React.useEffect(() => {
-    const loadLimitOrder = async () => {
-      try {
-        const orders = await getLimitOrdersApi();
-        setOrderPositions(orders);
-      } catch (error) {
-        console.error("Failed to fetch trade history:", error);
-      }
-    };
+  const loadLimitOrder = async () => {
+    try {
+      const orders = await getLimitOrdersApi();
+      setOrderPositions(orders);
+    } catch (error) {
+      console.error("Failed to fetch trade history:", error);
+    }
+  };
 
+  React.useEffect(() => {
     loadLimitOrder();
   }, []);
 
@@ -190,7 +188,12 @@ export default function TradePage() {
           <OrderBook pair={activePair.pair} midPrice={activePair.price} />
         </div>
         <div className="col-span-6 lg:col-span-3 max-h-[650px] overflow-hidden">
-          <TradePanel pair={activePair.pair} midPrice={activePair.price} />
+          <TradePanel
+            pair={activePair.pair}
+            midPrice={activePair.price}
+            onPositionCreated={loadPositions}
+            onOrderCreated={loadLimitOrder}
+          />
         </div>
       </div>
 

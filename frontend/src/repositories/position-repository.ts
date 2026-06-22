@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase/server";
 import {
-  ClosePosition,
+  ClosePositionDTO,
   CreatePositionDTO,
   UpdatePosition,
 } from "@/types/position";
@@ -44,7 +44,7 @@ export class PositionRepository {
     return positions;
   }
 
-  async closePosition(data: ClosePosition) {
+  async closePosition(data: ClosePositionDTO) {
     const { data: position, error } = await supabase
       .from("positions")
       .update({
