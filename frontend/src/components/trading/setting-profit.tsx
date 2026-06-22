@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { updateActivePositionsApi } from "@/lib/api/position-api";
 import { Position, UpdatePosition } from "@/types/position";
+import { Alert } from "../ui/alert";
 
 export function TPSLModal({
   open,
@@ -69,9 +70,11 @@ export function TPSLModal({
       <DialogContent className="max-w-md bg-surface border-border text-white">
         <DialogHeader className={""}>
           <DialogTitle>TP/SL for entire position</DialogTitle>
-          <DialogDescription>
-            Setting TP/SL close to liquidation price may cause the order to
-            fail.
+          <DialogDescription className="py-3">
+            <Alert className="text-muted-foreground font-mono text-xs bg-slate-950">
+              Setting TP/SL close to liquidation price may cause the order to
+              fail.
+            </Alert>
           </DialogDescription>
         </DialogHeader>
 

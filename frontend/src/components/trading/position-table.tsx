@@ -169,8 +169,7 @@ export function PositionsTable({
                         <AlertDialogTitle>Close Position</AlertDialogTitle>
 
                         <AlertDialogDescription>
-                          Are you sure you want to close this position? This
-                          action cannot be undone.
+                          Are you sure to close this position at market price?
                         </AlertDialogDescription>
                       </AlertDialogHeader>
 

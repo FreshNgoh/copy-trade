@@ -15,7 +15,6 @@ export interface Position {
 }
 
 export interface CreatePositionDTO {
-  order_id?: string;
   trader_wallet_address: string;
   symbol: string;
   quantity: number;

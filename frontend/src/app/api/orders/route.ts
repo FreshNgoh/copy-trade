@@ -32,10 +32,12 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
 
-    if (status === "PENDING" || "PARTIALLY_FILLED") {
+    if (status === "PENDING" || status === "PARTIALLY_FILLED") {
       const orders = await getLimitOrderPositions();
       return NextResponse.json(orders, { status: 200 });
     }
+
+    return NextResponse.json([], { status: 200 });
   } catch (error) {
     console.error("Fetch Orders Error:", error);
 

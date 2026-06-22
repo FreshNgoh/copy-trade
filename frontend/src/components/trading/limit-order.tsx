@@ -113,8 +113,7 @@ export function LimitOrder({
                               <AlertDialogTitle>Cancel Order</AlertDialogTitle>
 
                               <AlertDialogDescription>
-                                Are you sure you want to cancel this order? This
-                                action cannot be undone.
+                                Are you sure to cancel this order?
                               </AlertDialogDescription>
                             </AlertDialogHeader>
 

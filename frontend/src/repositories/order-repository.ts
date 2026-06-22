@@ -1,5 +1,9 @@
 import { supabase } from "@/lib/supabase/server";
-import { CancelLimitOrder, CreateOrderDTO } from "@/types/limit-order";
+import {
+  CancelLimitOrder,
+  CreateOrderDTO,
+  UpdateLimitOrder,
+} from "@/types/limit-order";
 
 export class OrderRepository {
   async createLimitOrder(data: CreateOrderDTO) {
@@ -43,12 +47,43 @@ export class OrderRepository {
     return order;
   }
 
+  async getPendingOrders(symbol: string) {
+    const { data: order, error } = await supabase
+      .from("orders")
+      .select("*")
+      .in("status", ["PENDING", "PARTIALLY_FILLED"])
+      .eq("symbol", symbol);
+
+    if (error) {
+      throw error;
+    }
+    return order;
+  }
+
   async cancelLimitOrder(data: CancelLimitOrder) {
     const { data: order, error } = await supabase
       .from("orders")
       .update({
         updated_at: data.updated_at,
         status: "CANCELLED",
+      })
+      .eq("order_id", data.order_id)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+    return order;
+  }
+
+  async updateLimitOrder(data: UpdateLimitOrder) {
+    const { data: order, error } = await supabase
+      .from("orders")
+      .update({
+        filled_quantity: data.filled_quantity,
+        updated_at: data.updated_at,
+        status: data.status,
       })
       .eq("order_id", data.order_id)
       .select()

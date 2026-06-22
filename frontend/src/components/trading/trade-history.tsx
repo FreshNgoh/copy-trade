@@ -25,7 +25,6 @@ export function HistoryTable({
               <th className="text-right px-4 py-2">Roi</th>
               <th className="text-right px-4 py-2">Open Time</th>
               <th className="text-right px-4 py-2">Closed Time</th>
-              <th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody>

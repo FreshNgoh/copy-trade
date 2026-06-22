@@ -12,6 +12,7 @@ import { HistoryTable } from "@/components/trading/trade-history";
 import { LimitOrder } from "@/components/trading/limit-order";
 import { getLimitOrdersApi } from "@/lib/api/order-api";
 import { PairSelector } from "@/components/trading/pair-selector";
+import { useBinancePrice } from "@/hooks/use-binance-price";
 
 const INITIAL_PAIRS = [
   { pair: "ETH/USDC", price: 0, change: 0, vol: "$0" },
@@ -116,6 +117,82 @@ export default function TradePage() {
   React.useEffect(() => {
     loadLimitOrder();
   }, []);
+
+  // match with order book price and quantity
+  const { bestBid, bestAsk, midPrice, askQty, bidQty } = useBinancePrice(
+    activePair.pair,
+  );
+  const bookTickerRef = React.useRef({
+    bestBid: 0,
+    bestAsk: 0,
+    askQty: 0,
+    bidQty: 0,
+  });
+
+  React.useEffect(() => {
+    if (!midPrice) return;
+
+    setActivePair((prev) => ({
+      ...prev,
+      price: midPrice,
+    }));
+  }, [midPrice]);
+
+  React.useEffect(() => {
+    bookTickerRef.current = {
+      bestBid,
+      bestAsk,
+      askQty,
+      bidQty,
+    };
+  }, [bestBid, bestAsk, askQty, bidQty]);
+
+  const hasOpenOrdersForActivePair = React.useMemo(
+    () => orderPositions.some((order) => order.symbol === activePair.pair),
+    [activePair.pair, orderPositions],
+  );
+
+  React.useEffect(() => {
+    if (!hasOpenOrdersForActivePair) return;
+
+    let isMatching = false;
+
+    const matchOrders = async () => {
+      if (isMatching) return;
+
+      const { bestBid, bestAsk, askQty, bidQty } = bookTickerRef.current;
+
+      if (!bestBid || !bestAsk) return;
+
+      isMatching = true;
+
+      try {
+        await fetch("/api/orders/match", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            symbol: activePair.pair,
+            bestBid,
+            bestAsk,
+            askQty,
+            bidQty,
+          }),
+        });
+
+        await loadPositions();
+        await loadLimitOrder();
+      } finally {
+        isMatching = false;
+      }
+    };
+
+    matchOrders();
+    const interval = setInterval(matchOrders, 5000);
+
+    return () => clearInterval(interval);
+  }, [activePair.pair, hasOpenOrdersForActivePair]);
 
   return (
     <div data-testid="trade-page" className="bg-background min-h-screen pb-8">

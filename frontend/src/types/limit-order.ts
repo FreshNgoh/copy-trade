@@ -33,3 +33,10 @@ export interface CancelLimitOrder {
   updated_at: Date;
   status: "CANCELLED";
 }
+
+export interface UpdateLimitOrder {
+  order_id: string;
+  filled_quantity: number;
+  updated_at: string;
+  status: "FILLED" | "PARTIALLY_FILLED";
+}
