@@ -39,6 +39,10 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 /* Selection */
 ::selection {
   background-color: #00E5FF;

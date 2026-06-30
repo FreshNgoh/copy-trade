@@ -1,12 +1,20 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import Link from 'next/link';
-import { useAccount } from 'wagmi';
-import { ACTIVE_POSITIONS, RECENT_ACTIVITY, TRADERS } from '@/lib/mock-data';
-import { cn } from '@/lib/utils';
-import { Wallet, ArrowDownToLine, ArrowUpFromLine, Pause, X } from 'lucide-react';
-import { toast } from 'sonner';
+import * as React from "react";
+import Link from "next/link";
+import { useAccount } from "wagmi";
+import { DepositUSDC } from "@/components/wallet/deposit-usdc";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { ACTIVE_POSITIONS, RECENT_ACTIVITY, TRADERS } from "@/lib/mock-data";
+import { cn } from "@/lib/utils";
+import {
+  Wallet,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Pause,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
 
 const PORTFOLIO = {
   totalValue: 24840.21,
@@ -26,6 +34,7 @@ const COPIED = TRADERS.slice(0, 3).map((t, i) => ({
 
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
+  const [depositOpen, setDepositOpen] = React.useState(false);
 
   return (
     <div data-testid="dashboard-page" className="bg-background min-h-screen">
@@ -38,7 +47,7 @@ export default function DashboardPage() {
             </div>
             <h1
               className="font-heading text-3xl lg:text-5xl font-bold tracking-tighter"
-              style={{ fontFamily: 'var(--font-unbounded)' }}
+              style={{ fontFamily: "var(--font-unbounded)" }}
             >
               Dashboard
             </h1>
@@ -51,7 +60,7 @@ export default function DashboardPage() {
           <div className="flex gap-2">
             <button
               data-testid="deposit-button"
-              onClick={() => toast.info('Deposit', { description: 'Smart contract vault deposit modal would open here.' })}
+              onClick={() => setDepositOpen(true)}
               className="inline-flex items-center gap-2 bg-white text-black px-5 py-2.5 font-medium hover:bg-neutral-200 text-sm"
             >
               <ArrowDownToLine className="w-4 h-4" />
@@ -59,7 +68,7 @@ export default function DashboardPage() {
             </button>
             <button
               data-testid="withdraw-button"
-              onClick={() => toast.info('Withdraw initiated')}
+              onClick={() => toast.info("Withdraw initiated")}
               className="inline-flex items-center gap-2 border border-border px-5 py-2.5 hover:border-border-focus text-sm"
             >
               <ArrowUpFromLine className="w-4 h-4" />
@@ -68,24 +77,47 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <Sheet open={depositOpen} onOpenChange={setDepositOpen}>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-[440px] p-0 bg-surface border-border text-white overflow-y-auto"
+          >
+            <DepositUSDC onSuccess={() => setDepositOpen(false)} />
+          </SheetContent>
+        </Sheet>
+
         {/* Top stats grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border">
           {[
-            { label: 'Total Portfolio Value', value: `$${PORTFOLIO.totalValue.toLocaleString()}`, mono: true },
             {
-              label: '24h PnL',
+              label: "Total Portfolio Value",
+              value: `$${PORTFOLIO.totalValue.toLocaleString()}`,
+              mono: true,
+            },
+            {
+              label: "24h PnL",
               value: `+$${PORTFOLIO.pnl24h.toFixed(2)} (+${PORTFOLIO.pnl24hPct}%)`,
               mono: true,
-              accent: 'text-success',
+              accent: "text-success",
             },
-            { label: 'Margin Used', value: `$${PORTFOLIO.margin.toLocaleString()}`, mono: true },
-            { label: 'Free Collateral', value: `$${PORTFOLIO.free.toLocaleString()}`, mono: true },
+            {
+              label: "Margin Used",
+              value: `$${PORTFOLIO.margin.toLocaleString()}`,
+              mono: true,
+            },
+            {
+              label: "Free Collateral",
+              value: `$${PORTFOLIO.free.toLocaleString()}`,
+              mono: true,
+            },
           ].map((s) => (
             <div key={s.label} className="bg-surface p-5">
               <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-2">
                 {s.label}
               </div>
-              <div className={cn('font-mono text-2xl', s.accent)}>{s.value}</div>
+              <div className={cn("font-mono text-2xl", s.accent)}>
+                {s.value}
+              </div>
             </div>
           ))}
         </div>
@@ -122,31 +154,51 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {ACTIVE_POSITIONS.map((p) => (
-                    <tr key={p.id} className="border-b border-border hover:bg-surface-hover">
+                    <tr
+                      key={p.id}
+                      className="border-b border-border hover:bg-surface-hover"
+                    >
                       <td className="px-4 py-3 font-mono text-sm">{p.pair}</td>
                       <td className="px-4 py-3">
                         <span
                           className={cn(
-                            'text-[10px] font-mono uppercase px-1.5 py-0.5 border',
-                            p.side === 'LONG' ? 'border-success text-success bg-success/10' : 'border-danger text-danger bg-danger/10'
+                            "text-[10px] font-mono uppercase px-1.5 py-0.5 border",
+                            p.side === "LONG"
+                              ? "border-success text-success bg-success/10"
+                              : "border-danger text-danger bg-danger/10",
                           )}
                         >
                           {p.side} · {p.leverage}×
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-sm">${p.size.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground">${p.entry.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right font-mono text-sm">${p.mark.toLocaleString()}</td>
-                      <td className={cn('px-4 py-3 text-right font-mono text-sm', p.pnl >= 0 ? 'text-success' : 'text-danger')}>
-                        {p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(2)} ({p.pnlPct >= 0 ? '+' : ''}{p.pnlPct.toFixed(2)}%)
+                      <td className="px-4 py-3 text-right font-mono text-sm">
+                        ${p.size.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground">
+                        ${p.entry.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-sm">
+                        ${p.mark.toLocaleString()}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-4 py-3 text-right font-mono text-sm",
+                          p.pnl >= 0 ? "text-success" : "text-danger",
+                        )}
+                      >
+                        {p.pnl >= 0 ? "+" : ""}${p.pnl.toFixed(2)} (
+                        {p.pnlPct >= 0 ? "+" : ""}
+                        {p.pnlPct.toFixed(2)}%)
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
-                        {p.copiedFrom ? `↻ ${p.copiedFrom}` : 'Manual'}
+                        {p.copiedFrom ? `↻ ${p.copiedFrom}` : "Manual"}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
                           data-testid={`close-position-${p.id}`}
-                          onClick={() => toast.success(`Position ${p.pair} close requested`)}
+                          onClick={() =>
+                            toast.success(`Position ${p.pair} close requested`)
+                          }
                           className="text-[10px] uppercase font-mono border border-border px-2 py-1 hover:border-danger hover:text-danger"
                         >
                           Close
@@ -170,24 +222,32 @@ export default function DashboardPage() {
               </div>
               <div>
                 <div className="font-mono text-sm">
-                  {isConnected ? `${address?.slice(0, 6)}…${address?.slice(-4)}` : 'Not connected'}
+                  {isConnected
+                    ? `${address?.slice(0, 6)}…${address?.slice(-4)}`
+                    : "Not connected"}
                 </div>
                 <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                  {isConnected ? 'Sepolia Testnet' : 'Connect to view'}
+                  {isConnected ? "Sepolia Testnet" : "Connect to view"}
                 </div>
               </div>
             </div>
             <div className="space-y-3 pt-3 border-t border-border">
               <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">USDC</span>
+                <span className="text-[10px] uppercase font-mono text-muted-foreground">
+                  USDC
+                </span>
                 <span className="font-mono text-sm">12,400.00</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">ETH</span>
+                <span className="text-[10px] uppercase font-mono text-muted-foreground">
+                  ETH
+                </span>
                 <span className="font-mono text-sm">3.4521</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">Copy Allocated</span>
+                <span className="text-[10px] uppercase font-mono text-muted-foreground">
+                  Copy Allocated
+                </span>
                 <span className="font-mono text-sm">$4,200</span>
               </div>
             </div>
@@ -210,39 +270,58 @@ export default function DashboardPage() {
                   data-testid={`copied-trader-${c.trader.ens}`}
                 >
                   <div className="w-10 h-10 overflow-hidden border border-border flex-shrink-0">
-                    <img src={c.trader.avatar} alt={c.trader.ens} className="w-full h-full object-cover" />
+                    <img
+                      src={c.trader.avatar}
+                      alt={c.trader.ens}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm truncate">{c.trader.ens}</span>
+                      <span className="font-medium text-sm truncate">
+                        {c.trader.ens}
+                      </span>
                       <span
                         className={cn(
-                          'text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 border',
-                          c.active ? 'border-success text-success bg-success/10' : 'border-muted-foreground text-muted-foreground'
+                          "text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 border",
+                          c.active
+                            ? "border-success text-success bg-success/10"
+                            : "border-muted-foreground text-muted-foreground",
                         )}
                       >
-                        {c.active ? 'ACTIVE' : 'PAUSED'}
+                        {c.active ? "ACTIVE" : "PAUSED"}
                       </span>
                     </div>
                     <div className="font-mono text-xs text-muted-foreground mt-0.5">
-                      ${c.allocated.toLocaleString()} allocated · {c.trades24h} trades today
+                      ${c.allocated.toLocaleString()} allocated · {c.trades24h}{" "}
+                      trades today
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-mono text-sm text-success">+${(c.allocated * c.trader.roi30d / 100).toFixed(0)}</div>
-                    <div className="text-[10px] uppercase font-mono text-muted-foreground">30D PnL</div>
+                    <div className="font-mono text-sm text-success">
+                      +${((c.allocated * c.trader.roi30d) / 100).toFixed(0)}
+                    </div>
+                    <div className="text-[10px] uppercase font-mono text-muted-foreground">
+                      30D PnL
+                    </div>
                   </div>
                   <div className="flex gap-1">
                     <button
                       data-testid={`pause-${c.trader.ens}`}
-                      onClick={() => toast.success(`${c.active ? 'Paused' : 'Resumed'} copying ${c.trader.ens}`)}
+                      onClick={() =>
+                        toast.success(
+                          `${c.active ? "Paused" : "Resumed"} copying ${c.trader.ens}`,
+                        )
+                      }
                       className="w-8 h-8 border border-border hover:border-border-focus flex items-center justify-center"
                     >
                       <Pause className="w-3.5 h-3.5" />
                     </button>
                     <button
                       data-testid={`stop-${c.trader.ens}`}
-                      onClick={() => toast.success(`Stopped copying ${c.trader.ens}`)}
+                      onClick={() =>
+                        toast.success(`Stopped copying ${c.trader.ens}`)
+                      }
                       className="w-8 h-8 border border-border hover:border-danger hover:text-danger flex items-center justify-center"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -261,23 +340,28 @@ export default function DashboardPage() {
             </div>
             <div data-testid="activity-feed">
               {RECENT_ACTIVITY.map((a) => (
-                <div key={a.id} className="px-5 py-3 border-b border-border last:border-0 text-xs">
+                <div
+                  key={a.id}
+                  className="px-5 py-3 border-b border-border last:border-0 text-xs"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <span
                       className={cn(
-                        'text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 border',
-                        a.type === 'COPY_OPEN'
-                          ? 'border-accent text-accent'
-                          : a.type === 'TRADE_CLOSE'
-                          ? 'border-success text-success'
-                          : a.type === 'DEPOSIT'
-                          ? 'border-warning text-warning'
-                          : 'border-border text-muted-foreground'
+                        "text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 border",
+                        a.type === "COPY_OPEN"
+                          ? "border-accent text-accent"
+                          : a.type === "TRADE_CLOSE"
+                            ? "border-success text-success"
+                            : a.type === "DEPOSIT"
+                              ? "border-warning text-warning"
+                              : "border-border text-muted-foreground",
                       )}
                     >
-                      {a.type.replace('_', ' ')}
+                      {a.type.replace("_", " ")}
                     </span>
-                    <span className="text-[10px] font-mono text-muted-foreground">{a.time}</span>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {a.time}
+                    </span>
                   </div>
                   <div className="mt-1.5 leading-relaxed">{a.detail}</div>
                   <div className="font-mono text-[10px] text-muted-foreground mt-1">

@@ -1,5 +1,5 @@
 import {
-  ClosePosition,
+  ClosePositionDTO,
   CreatePositionDTO,
   UpdatePosition,
 } from "@/types/position";
@@ -41,13 +41,13 @@ export async function getPositionsApi() {
   return data;
 }
 
-export async function closePositionApi(postition: ClosePosition) {
+export async function closePositionApi(position: ClosePositionDTO) {
   const response = await fetch("/api/positions", {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(postition),
+    body: JSON.stringify(position),
   });
 
   const data = await response.json();

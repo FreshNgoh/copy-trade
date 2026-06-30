@@ -3,11 +3,7 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Command,
   CommandEmpty,
@@ -21,24 +17,32 @@ export function PairSelector({ pairs, activePair, setActivePair }) {
   const [open, setOpen] = React.useState(false);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
         <button className="flex items-center gap-2 font-heading text-xl font-bold tracking-tighter hover:text-accent">
           {activePair.pair}
           <ChevronDown size={16} />
         </button>
-      </PopoverTrigger>
+      </SheetTrigger>
 
-      <PopoverContent
-        align="start"
-        side="bottom"
-        sideOffset={30}
-        className="w-[420px] h-[640px] p-0 bg-surface border-border text-white"
+      <SheetContent
+        side="left"
+        className="w-full sm:max-w-[420px] p-0 bg-surface border-border text-white"
       >
-        <Command className="bg-surface h-[640px]">
-          <CommandInput placeholder="Search coin, e.g. BTC or ETH" />
+        <div className="border-b border-border px-5 py-4">
+          <div className="text-[10px] uppercase tracking-[0.2em] font-mono text-muted-foreground mb-2">
+            ▎ Markets
+          </div>
+          <div className="font-heading text-lg font-bold">Select Pair</div>
+        </div>
 
-          <CommandList>
+        <Command className="bg-surface h-[calc(100vh-81px)] rounded-none">
+          <CommandInput
+            placeholder="Search coin, e.g. BTC or ETH"
+            className="h-12"
+          />
+
+          <CommandList className="max-h-none flex-1">
             <CommandEmpty>No market found.</CommandEmpty>
 
             <CommandGroup heading="USDC Perpetuals">
@@ -85,7 +89,7 @@ export function PairSelector({ pairs, activePair, setActivePair }) {
             </CommandGroup>
           </CommandList>
         </Command>
-      </PopoverContent>
-    </Popover>
+      </SheetContent>
+    </Sheet>
   );
 }
