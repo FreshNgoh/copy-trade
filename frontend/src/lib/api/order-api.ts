@@ -20,8 +20,13 @@ export async function createOrderApi(order: CreateOrderDTO) {
   return data;
 }
 
-export async function getLimitOrdersApi() {
-  const response = await fetch("/api/orders?status=PENDING", {
+export async function getLimitOrdersApi(traderWalletAddress: string) {
+  const params = new URLSearchParams({
+    status: "PENDING",
+    trader_wallet_address: traderWalletAddress,
+  });
+
+  const response = await fetch(`/api/orders?${params.toString()}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",

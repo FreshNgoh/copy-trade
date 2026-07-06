@@ -28,8 +28,8 @@ export async function createOrder(data: CreateOrderDTO) {
   return { order };
 }
 
-export async function getLimitOrderPositions() {
-  return orderRepository.getLimitOrderPositions();
+export async function getLimitOrderPositions(traderWalletAddress: string) {
+  return orderRepository.getLimitOrderPositions(traderWalletAddress);
 }
 
 export async function getPendingOrders(symbol: string) {

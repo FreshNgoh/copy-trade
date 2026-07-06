@@ -13,6 +13,7 @@ import { LimitOrder } from "@/components/trading/limit-order";
 import { getLimitOrdersApi } from "@/lib/api/order-api";
 import { PairSelector } from "@/components/trading/pair-selector";
 import { useBinancePrice } from "@/hooks/use-binance-price";
+import { useAccount } from "wagmi";
 
 const INITIAL_PAIRS = [
   { pair: "ETH/USDC", price: 0, change: 0, vol: "$0" },
@@ -51,6 +52,7 @@ async function fetchAllTickers() {
 }
 
 export default function TradePage() {
+  const { address } = useAccount();
   const [pairs, setPairs] = React.useState(INITIAL_PAIRS);
   const [activePair, setActivePair] = React.useState(INITIAL_PAIRS[1]);
   const [tab, setTab] = React.useState<"positions" | "orders" | "history">(
@@ -60,18 +62,23 @@ export default function TradePage() {
   const [closedPositions, setClosedPositions] = React.useState([]);
   const [orderPositions, setOrderPositions] = React.useState([]);
 
-  const loadPositions = async () => {
+  const loadPositions = React.useCallback(async () => {
+    if (!address) {
+      setActivePositions([]);
+      return;
+    }
+
     try {
-      const positions = await getPositionsApi();
+      const positions = await getPositionsApi(address);
       setActivePositions(positions);
     } catch (error) {
       console.error("Failed to fetch positions:", error);
     }
-  };
+  }, [address]);
 
   React.useEffect(() => {
     loadPositions();
-  }, []);
+  }, [loadPositions]);
 
   React.useEffect(() => {
     const loadPairs = async () => {
@@ -92,31 +99,41 @@ export default function TradePage() {
     return () => clearInterval(interval);
   }, []);
 
-  React.useEffect(() => {
-    const loadTradeHistory = async () => {
-      try {
-        const positions = await getClosedPositionsApi();
-        setClosedPositions(positions);
-      } catch (error) {
-        console.error("Failed to fetch trade history:", error);
-      }
-    };
+  const loadTradeHistory = React.useCallback(async () => {
+    if (!address) {
+      setClosedPositions([]);
+      return;
+    }
 
-    loadTradeHistory();
-  }, []);
-
-  const loadLimitOrder = async () => {
     try {
-      const orders = await getLimitOrdersApi();
+      const positions = await getClosedPositionsApi(address);
+      setClosedPositions(positions);
+    } catch (error) {
+      console.error("Failed to fetch trade history:", error);
+    }
+  }, [address]);
+
+  React.useEffect(() => {
+    loadTradeHistory();
+  }, [loadTradeHistory]);
+
+  const loadLimitOrder = React.useCallback(async () => {
+    if (!address) {
+      setOrderPositions([]);
+      return;
+    }
+
+    try {
+      const orders = await getLimitOrdersApi(address);
       setOrderPositions(orders);
     } catch (error) {
       console.error("Failed to fetch trade history:", error);
     }
-  };
+  }, [address]);
 
   React.useEffect(() => {
     loadLimitOrder();
-  }, []);
+  }, [loadLimitOrder]);
 
   // match with order book price and quantity
   const { bestBid, bestAsk, midPrice, askQty, bidQty } = useBinancePrice(
@@ -192,7 +209,7 @@ export default function TradePage() {
     const interval = setInterval(matchOrders, 5000);
 
     return () => clearInterval(interval);
-  }, [activePair.pair, hasOpenOrdersForActivePair]);
+  }, [activePair.pair, hasOpenOrdersForActivePair, loadLimitOrder, loadPositions]);
 
   return (
     <div data-testid="trade-page" className="bg-background min-h-screen pb-8">

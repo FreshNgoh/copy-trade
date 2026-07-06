@@ -59,6 +59,7 @@ export function PositionsTable({
               try {
                 await closePositionApi({
                   position_id: p.position_id,
+                  trader_wallet_address: p.trader_wallet_address,
                   closing_price: markPrice,
                   updated_at: new Date().toISOString(),
                   status: "CLOSED",

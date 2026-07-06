@@ -30,6 +30,7 @@ export interface LimitOrder {
 
 export interface CancelLimitOrder {
   order_id: string;
+  trader_wallet_address: string;
   updated_at: Date;
   status: "CANCELLED";
 }

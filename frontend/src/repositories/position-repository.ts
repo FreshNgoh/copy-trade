@@ -31,11 +31,12 @@ export class PositionRepository {
     return position;
   }
 
-  async getOpenPositions() {
+  async getOpenPositions(traderWalletAddress: string) {
     const { data: positions, error } = await supabase
       .from("positions")
       .select("*")
       .order("created_at", { ascending: false })
+      .eq("trader_wallet_address", traderWalletAddress)
       .eq("status", "OPEN");
 
     if (error) {
@@ -55,6 +56,7 @@ export class PositionRepository {
         Roi: data.Roi,
       })
       .eq("position_id", data.position_id)
+      .eq("trader_wallet_address", data.trader_wallet_address)
       .select()
       .single();
 
@@ -64,11 +66,12 @@ export class PositionRepository {
     return position;
   }
 
-  async getClosedPositions() {
+  async getClosedPositions(traderWalletAddress: string) {
     const { data: positions, error } = await supabase
       .from("positions")
       .select("*")
       .order("created_at", { ascending: false })
+      .eq("trader_wallet_address", traderWalletAddress)
       .eq("status", "CLOSED");
 
     if (error) {
@@ -85,6 +88,7 @@ export class PositionRepository {
         stop_loss: data.stop_loss,
       })
       .eq("position_id", data.position_id)
+      .eq("trader_wallet_address", data.trader_wallet_address)
       .select()
       .single();
     if (error) {

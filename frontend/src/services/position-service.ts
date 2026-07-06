@@ -17,16 +17,16 @@ export async function createPosition(position: CreatePositionDTO) {
   return positionRepository.createMarketOrder(position);
 }
 
-export async function getOpenPositions() {
-  return positionRepository.getOpenPositions();
+export async function getOpenPositions(traderWalletAddress: string) {
+  return positionRepository.getOpenPositions(traderWalletAddress);
 }
 
 export async function closePosition(position: ClosePositionDTO) {
   return positionRepository.closePosition(position);
 }
 
-export async function getClosedPositions() {
-  return positionRepository.getClosedPositions();
+export async function getClosedPositions(traderWalletAddress: string) {
+  return positionRepository.getClosedPositions(traderWalletAddress);
 }
 
 export async function updateActivePositions(position: UpdatePosition) {

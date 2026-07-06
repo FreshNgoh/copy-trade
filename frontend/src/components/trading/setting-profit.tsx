@@ -45,6 +45,7 @@ export function TPSLModal({
 
       const updateTPSL: UpdatePosition = await updateActivePositionsApi({
         position_id: position.position_id,
+        trader_wallet_address: position.trader_wallet_address,
         take_profit: takeProfit ? Number(takeProfit) : null,
         stop_loss: stopLoss ? Number(stopLoss) : null,
       });

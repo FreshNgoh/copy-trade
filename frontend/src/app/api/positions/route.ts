@@ -8,6 +8,11 @@ import {
 import { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
+function getTraderWalletAddress(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  return searchParams.get("trader_wallet_address")?.trim();
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -33,13 +38,21 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
+    const traderWalletAddress = getTraderWalletAddress(req);
+
+    if (!traderWalletAddress) {
+      return NextResponse.json(
+        { error: "Missing trader_wallet_address" },
+        { status: 400 },
+      );
+    }
 
     if (status === "CLOSED") {
-      const positions = await getClosedPositions();
+      const positions = await getClosedPositions(traderWalletAddress);
       return NextResponse.json(positions, { status: 200 });
     }
 
-    const positions = await getOpenPositions();
+    const positions = await getOpenPositions(traderWalletAddress);
     return NextResponse.json(positions, { status: 200 });
   } catch (error) {
     console.error("Fetch Positions Error:", error);

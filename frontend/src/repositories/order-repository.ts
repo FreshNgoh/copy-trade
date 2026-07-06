@@ -34,11 +34,12 @@ export class OrderRepository {
     return order;
   }
 
-  async getLimitOrderPositions() {
+  async getLimitOrderPositions(traderWalletAddress: string) {
     const { data: order, error } = await supabase
       .from("orders")
       .select("*")
       .order("created_at", { ascending: false })
+      .eq("trader_wallet_address", traderWalletAddress)
       .in("status", ["PENDING", "PARTIALLY_FILLED"]);
 
     if (error) {
@@ -68,6 +69,7 @@ export class OrderRepository {
         status: "CANCELLED",
       })
       .eq("order_id", data.order_id)
+      .eq("trader_wallet_address", data.trader_wallet_address)
       .select()
       .single();
 

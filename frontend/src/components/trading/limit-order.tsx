@@ -28,6 +28,7 @@ export function LimitOrder({
     try {
       await cancelOrderApi({
         order_id: order.order_id,
+        trader_wallet_address: order.trader_wallet_address,
         updated_at: new Date(),
         status: "CANCELLED",
       });

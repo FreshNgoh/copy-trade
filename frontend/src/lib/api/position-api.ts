@@ -24,8 +24,13 @@ export async function createPositionApi(position: CreatePositionDTO) {
   return data;
 }
 
-export async function getPositionsApi() {
-  const response = await fetch("/api/positions?status=OPEN", {
+export async function getPositionsApi(traderWalletAddress: string) {
+  const params = new URLSearchParams({
+    status: "OPEN",
+    trader_wallet_address: traderWalletAddress,
+  });
+
+  const response = await fetch(`/api/positions?${params.toString()}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -61,8 +66,13 @@ export async function closePositionApi(position: ClosePositionDTO) {
   return data;
 }
 
-export async function getClosedPositionsApi() {
-  const response = await fetch("/api/positions?status=CLOSED", {
+export async function getClosedPositionsApi(traderWalletAddress: string) {
+  const params = new URLSearchParams({
+    status: "CLOSED",
+    trader_wallet_address: traderWalletAddress,
+  });
+
+  const response = await fetch(`/api/positions?${params.toString()}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",

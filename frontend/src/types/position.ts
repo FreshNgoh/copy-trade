@@ -42,6 +42,7 @@ export interface ClosedPosition {
 
 export interface ClosePositionDTO {
   position_id: string;
+  trader_wallet_address: string;
   closing_price: number;
   updated_at: string;
   status: "OPEN" | "CLOSED";
@@ -51,6 +52,7 @@ export interface ClosePositionDTO {
 
 export interface UpdatePosition {
   position_id: string;
+  trader_wallet_address: string;
   take_profit: number | null;
   stop_loss: number | null;
   // liquidation_price: number;
