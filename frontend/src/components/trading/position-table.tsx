@@ -116,7 +116,7 @@ export function PositionsTable({
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-right font-mono text-sm">
-                  {Number(p.quantity).toFixed(2)}
+                  {Number(p.quantity).toFixed(3)}
                   {" " + p.symbol.split("/")[0]}
                 </td>
                 <td className="px-4 py-2.5 text-right font-mono text-sm text-muted-foreground">

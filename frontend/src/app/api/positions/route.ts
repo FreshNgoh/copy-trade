@@ -1,6 +1,6 @@
 import {
   closePosition,
-  createPosition,
+  openOrIncreasePosition,
   getClosedPositions,
   getOpenPositions,
   updateActivePositions,
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    const result = await createPosition(body);
+    const result = await openOrIncreasePosition(body);
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {

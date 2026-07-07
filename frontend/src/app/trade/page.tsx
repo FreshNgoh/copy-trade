@@ -168,9 +168,20 @@ export default function TradePage() {
     () => orderPositions.some((order) => order.symbol === activePair.pair),
     [activePair.pair, orderPositions],
   );
+  const hasTriggerablePositionsForActivePair = React.useMemo(
+    () =>
+      activePositions.some(
+        (position) =>
+          position.symbol === activePair.pair &&
+          (Number(position.take_profit) > 0 || Number(position.stop_loss) > 0),
+      ),
+    [activePair.pair, activePositions],
+  );
 
   React.useEffect(() => {
-    if (!hasOpenOrdersForActivePair) return;
+    if (!hasOpenOrdersForActivePair && !hasTriggerablePositionsForActivePair) {
+      return;
+    }
 
     let isMatching = false;
 
@@ -199,6 +210,7 @@ export default function TradePage() {
         });
 
         await loadPositions();
+        await loadTradeHistory();
         await loadLimitOrder();
       } finally {
         isMatching = false;
@@ -209,7 +221,14 @@ export default function TradePage() {
     const interval = setInterval(matchOrders, 5000);
 
     return () => clearInterval(interval);
-  }, [activePair.pair, hasOpenOrdersForActivePair, loadLimitOrder, loadPositions]);
+  }, [
+    activePair.pair,
+    hasOpenOrdersForActivePair,
+    hasTriggerablePositionsForActivePair,
+    loadLimitOrder,
+    loadPositions,
+    loadTradeHistory,
+  ]);
 
   return (
     <div data-testid="trade-page" className="bg-background min-h-screen pb-8">

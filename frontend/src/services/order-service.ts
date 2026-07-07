@@ -5,13 +5,51 @@ import {
   CreateOrderDTO,
   UpdateLimitOrder,
 } from "@/types/limit-order";
-import { createPosition } from "./position-service";
+import { openOrIncreasePosition } from "./position-service";
+
+function calculateClosedPositionMetrics({
+  direction,
+  entryPrice,
+  closingPrice,
+  quantity,
+  leverage,
+}: {
+  direction: "LONG" | "SHORT";
+  entryPrice: number;
+  closingPrice: number;
+  quantity: number;
+  leverage: number;
+}) {
+  const pnl =
+    direction === "LONG"
+      ? (closingPrice - entryPrice) * quantity
+      : (entryPrice - closingPrice) * quantity;
+  const roi = (pnl / (entryPrice * quantity)) * leverage * 100;
+
+  return { pnl, roi };
+}
 
 export async function createOrder(data: CreateOrderDTO) {
+  if (!Number.isFinite(Number(data.quantity)) || Number(data.quantity) <= 0) {
+    throw new Error("Quantity must be greater than 0");
+  }
+
+  if (!Number.isFinite(Number(data.leverage)) || Number(data.leverage) <= 0) {
+    throw new Error("Leverage must be greater than 0");
+  }
+
+  if (
+    data.order_type === "LIMIT" &&
+    (!Number.isFinite(Number(data.limit_price)) ||
+      Number(data.limit_price) <= 0)
+  ) {
+    throw new Error("Limit price must be greater than 0");
+  }
+
   const order = await orderRepository.createLimitOrder(data);
 
   if (data.order_type === "MARKET") {
-    const position = await positionRepository.createMarketOrder({
+    const position = await openOrIncreasePosition({
       trader_wallet_address: data.trader_wallet_address,
       symbol: data.symbol,
       quantity: data.quantity,
@@ -44,6 +82,66 @@ export async function updateLimitOrder(order: UpdateLimitOrder) {
   return orderRepository.updateLimitOrder(order);
 }
 
+export async function processTriggeredPositions({
+  symbol,
+  bestBid,
+  bestAsk,
+}: {
+  symbol: string;
+  bestBid: number;
+  bestAsk: number;
+}) {
+  const openPositions =
+    await positionRepository.getOpenPositionsBySymbol(symbol);
+
+  for (const position of openPositions) {
+    const takeProfit = Number(position.take_profit);
+    const stopLoss = Number(position.stop_loss);
+    const entryPrice = Number(position.entry_price);
+    const quantity = Number(position.quantity);
+    const leverage = Number(position.leverage);
+    const closePrice = position.direction === "LONG" ? bestBid : bestAsk;
+
+    if (closePrice <= 0 || entryPrice <= 0 || quantity <= 0 || leverage <= 0) {
+      continue;
+    }
+
+    const hasTakeProfit = Number.isFinite(takeProfit) && takeProfit > 0;
+    const hasStopLoss = Number.isFinite(stopLoss) && stopLoss > 0;
+
+    const takeProfitMatched =
+      hasTakeProfit &&
+      (position.direction === "LONG"
+        ? closePrice >= takeProfit
+        : closePrice <= takeProfit);
+    const stopLossMatched =
+      hasStopLoss &&
+      (position.direction === "LONG"
+        ? closePrice <= stopLoss
+        : closePrice >= stopLoss);
+
+    if (!takeProfitMatched && !stopLossMatched) continue;
+
+    const { pnl, roi } = calculateClosedPositionMetrics({
+      direction: position.direction,
+      entryPrice,
+      closingPrice: closePrice,
+      quantity,
+      leverage,
+    });
+
+    await positionRepository.closePosition({
+      position_id: position.position_id,
+      trader_wallet_address: position.trader_wallet_address,
+      closing_price: closePrice,
+      updated_at: new Date().toISOString(),
+      status: "CLOSED",
+      Pnl: pnl,
+      Roi: roi,
+    });
+  }
+}
+
 export async function processPendingOrders({
   symbol,
   bestBid,
@@ -57,6 +155,8 @@ export async function processPendingOrders({
   askQty: number;
   bidQty: number;
 }) {
+  await processTriggeredPositions({ symbol, bestBid, bestAsk });
+
   const pendingOrders = await getPendingOrders(symbol);
 
   for (const order of pendingOrders) {
@@ -87,16 +187,38 @@ export async function processPendingOrders({
     const remainingQty = orderQuantity - nextFilledQuantity;
     const orderStatus = remainingQty <= 0 ? "FILLED" : "PARTIALLY_FILLED";
 
-    await createPosition({
+    const existingPosition = await positionRepository.getOpenPosition({
       trader_wallet_address: order.trader_wallet_address,
       symbol: order.symbol,
-      quantity: canFillQty,
       direction: order.direction,
-      entry_price: entryPrice,
-      leverage: order.leverage,
-      stop_loss: order.stop_loss,
-      take_profit: order.take_profit,
     });
+
+    if (!existingPosition) {
+      await openOrIncreasePosition({
+        trader_wallet_address: order.trader_wallet_address,
+        symbol: order.symbol,
+        quantity: canFillQty,
+        direction: order.direction,
+        entry_price: entryPrice,
+        leverage: order.leverage,
+        stop_loss: order.stop_loss,
+        take_profit: order.take_profit,
+      });
+    } else {
+      const oldQty = Number(existingPosition.quantity);
+      const oldPrice = Number(existingPosition.entry_price);
+
+      const newQty = oldQty + canFillQty;
+
+      const averagePrice =
+        (oldQty * oldPrice + canFillQty * entryPrice) / newQty;
+
+      await positionRepository.updatePositionAfterFill({
+        position_id: existingPosition.position_id,
+        quantity: newQty,
+        entry_price: averagePrice,
+      });
+    }
 
     await updateLimitOrder({
       order_id: order.order_id,
