@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useAccount } from "wagmi";
 import { createPositionApi } from "@/lib/api/position-api";
 import { createOrderApi } from "@/lib/api/order-api";
+import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
 import { calculateTradeMetrics } from "@/lib/trading/calculation";
 
 export function TradePanel({
@@ -24,17 +25,87 @@ export function TradePanel({
   const [direction, setDirection] = React.useState<"BUY" | "SELL">("BUY");
   const [type, setType] = React.useState<"MARKET" | "LIMIT">("MARKET");
   const [price, setLimitPrice] = React.useState(midPrice.toString());
-  const [quantity, setQuantity] = React.useState("");
+  const [margin, setMargin] = React.useState("");
+  const [quantityInput, setQuantityInputValue] = React.useState("");
   const [leverage, setLeverage] = React.useState([5]);
   const [stopLoss, setStopLoss] = React.useState("");
   const [takeProfit, setTakeProfit] = React.useState("");
+  const [freeCollateral, setFreeCollateral] = React.useState(0);
   const orderPrice = type === "MARKET" ? midPrice : Number(price);
+  const marginAmount = Number(margin);
+  const orderQuantity =
+    orderPrice > 0 && marginAmount > 0
+      ? (marginAmount * leverage[0]) / orderPrice
+      : 0;
+  const baseAsset = pair?.split("/")[0] ?? "Asset";
   const metrics = calculateTradeMetrics({
-    quantity: Number(quantity),
+    quantity: orderQuantity,
     entry_price: orderPrice,
     leverage: leverage[0],
+    margin: marginAmount,
     direction: direction === "BUY" ? "LONG" : "SHORT",
   });
+  const isOverFreeCollateral =
+    marginAmount > 0 && marginAmount > freeCollateral;
+  const canSubmit =
+    isConnected &&
+    freeCollateral > 0 &&
+    orderPrice > 0 &&
+    marginAmount > 0 &&
+    orderQuantity > 0 &&
+    !isOverFreeCollateral;
+
+  const loadFreeCollateral = React.useCallback(async () => {
+    if (!address) {
+      setFreeCollateral(0);
+      return;
+    }
+
+    try {
+      const dashboard = await getTraderDashboardApi(address);
+      setFreeCollateral(Number(dashboard.stats.freeCollateral || 0));
+    } catch (error) {
+      console.error("Failed to fetch free collateral:", error);
+      setFreeCollateral(0);
+    }
+  }, [address]);
+
+  React.useEffect(() => {
+    loadFreeCollateral();
+  }, [loadFreeCollateral]);
+
+  const setMarginByCollateralPercent = (percent: number) => {
+    const nextMargin = freeCollateral * percent;
+    const nextQuantity =
+      orderPrice > 0 && nextMargin > 0
+        ? (nextMargin * leverage[0]) / orderPrice
+        : 0;
+
+    setMargin(nextMargin > 0 ? nextMargin.toFixed(2) : "");
+    setQuantityInputValue(nextQuantity > 0 ? nextQuantity.toFixed(3) : "");
+  };
+
+  const setQuantityInput = (value: string) => {
+    setQuantityInputValue(value);
+
+    const quantity = Number(value);
+    const nextMargin =
+      orderPrice > 0 && leverage[0] > 0 && quantity > 0
+        ? (quantity * orderPrice) / leverage[0]
+        : 0;
+
+    setMargin(nextMargin > 0 ? nextMargin.toString() : "");
+  };
+
+  React.useEffect(() => {
+    const quantity = Number(quantityInput);
+    const nextMargin =
+      orderPrice > 0 && leverage[0] > 0 && quantity > 0
+        ? (quantity * orderPrice) / leverage[0]
+        : 0;
+
+    setMargin(nextMargin > 0 ? nextMargin.toString() : "");
+  }, [leverage, orderPrice, quantityInput]);
 
   const placeMarketOrder = async () => {
     if (!isConnected || !address) {
@@ -42,11 +113,20 @@ export function TradePanel({
       return;
     }
 
+    if (!canSubmit) {
+      toast.error(
+        isOverFreeCollateral
+          ? "Margin exceeds free collateral"
+          : "Enter a valid margin amount",
+      );
+      return;
+    }
+
     try {
       await createPositionApi({
         trader_wallet_address: address,
         symbol: pair,
-        quantity: Number(quantity),
+        quantity: orderQuantity,
         direction: direction === "BUY" ? "LONG" : "SHORT",
         entry_price: type === "MARKET" ? midPrice : Number(price),
         leverage: leverage[0],
@@ -55,12 +135,14 @@ export function TradePanel({
       });
 
       toast.success("Position Created", {
-        description: `${direction} ${quantity} ${pair}`,
+        description: `${direction} ${orderQuantity.toFixed(6)} ${baseAsset}`,
       });
       await onPositionCreated();
+      await loadFreeCollateral();
 
       // Reset input
-      setQuantity("");
+      setMargin("");
+      setQuantityInputValue("");
       setStopLoss("");
       setTakeProfit("");
     } catch (error) {
@@ -76,11 +158,20 @@ export function TradePanel({
       return;
     }
 
+    if (!canSubmit) {
+      toast.error(
+        isOverFreeCollateral
+          ? "Margin exceeds free collateral"
+          : "Enter a valid margin amount",
+      );
+      return;
+    }
+
     try {
       await createOrderApi({
         trader_wallet_address: address,
         symbol: pair,
-        quantity: Number(quantity),
+        quantity: orderQuantity,
         direction: direction === "BUY" ? "LONG" : "SHORT",
         order_type: type,
         limit_price: Number(price),
@@ -90,14 +181,16 @@ export function TradePanel({
       });
 
       toast.success("Order Created", {
-        description: `${direction} ${quantity} ${pair}`,
+        description: `${direction} ${orderQuantity.toFixed(6)} ${baseAsset}`,
       });
 
       await onOrderCreated();
+      await loadFreeCollateral();
 
       // Reset input
       setLimitPrice(midPrice.toString());
-      setQuantity("");
+      setMargin("");
+      setQuantityInputValue("");
       setStopLoss("");
       setTakeProfit("");
     } catch (error) {
@@ -194,32 +287,41 @@ export function TradePanel({
           )}
         </div>
 
-        {/* Quantity */}
+        {/* Margin */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
               Quantity
             </span>
             <span className="text-[10px] font-mono text-muted-foreground">
-              {pair.split("/")[0]}
+              {baseAsset}
             </span>
           </div>
           <input
             data-testid="trade-size-input"
             type="number"
-            value={quantity}
-            placeholder="Quantity"
-            onChange={(e) => setQuantity(e.target.value)}
-            className="w-full bg-background border border-border focus:border-accent outline-none px-3 py-2 font-mono text-sm"
+            value={quantityInput}
+            placeholder="0.000"
+            onChange={(e) => setQuantityInput(e.target.value)}
+            className={cn(
+              "w-full bg-background border border-border focus:border-accent outline-none px-3 py-2 font-mono text-sm",
+              isOverFreeCollateral && "border-danger focus:border-danger",
+            )}
           />
           <div className="grid grid-cols-4 gap-1 mt-1.5">
-            {["25%", "50%", "75%", "MAX"].map((pct, i) => (
+            {[
+              { label: "25%", value: 0.25 },
+              { label: "50%", value: 0.5 },
+              { label: "75%", value: 0.75 },
+              { label: "MAX", value: 1 },
+            ].map((preset) => (
               <button
-                key={pct}
-                onClick={() => setQuantity(((i + 1) * 0.25 * 2).toFixed(2))}
-                className="py-1 text-[10px] font-mono uppercase border border-border hover:border-border-focus text-muted-foreground hover:text-white transition-colors"
+                key={preset.label}
+                onClick={() => setMarginByCollateralPercent(preset.value)}
+                disabled={freeCollateral <= 0}
+                className="py-1 text-[10px] font-mono uppercase border border-border hover:border-border-focus text-muted-foreground hover:text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {pct}
+                {preset.label}
               </button>
             ))}
           </div>
@@ -294,10 +396,23 @@ export function TradePanel({
         <div className="pt-3 border-t border-border space-y-1.5">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground font-mono uppercase tracking-wider text-[10px]">
+              Available
+            </span>
+            <span>${freeCollateral.toFixed(2)}</span>
+          </div>
+          {isOverFreeCollateral && (
+            <div className="mt-1.5 text-[10px] font-mono text-danger">
+              Margin exceeds available collateral.
+            </div>
+          )}
+          <div className="flex justify-between text-xs">
+            <span className="text-muted-foreground font-mono uppercase tracking-wider text-[10px]">
               Estimate Liq. Price
             </span>
             <span className="font-mono">
-              ${metrics.liquidationPrice.toFixed(2)}
+              {metrics.liquidationPrice > 0
+                ? `$${metrics.liquidationPrice.toFixed(2)}`
+                : "-"}
             </span>
           </div>
           <div className="flex justify-between text-xs">
@@ -308,7 +423,7 @@ export function TradePanel({
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground font-mono uppercase tracking-wider text-[10px]">
-              Margin
+              Initial Margin
             </span>
             <span className="font-mono">
               ${metrics.initialMargin.toFixed(2)}
@@ -326,8 +441,10 @@ export function TradePanel({
       <button
         data-testid="trade-submit-button"
         onClick={type === "MARKET" ? placeMarketOrder : placeLimitOrder}
+        disabled={!canSubmit}
         className={cn(
           "w-full py-4 font-medium font-mono uppercase tracking-wider text-sm transition-all",
+          !canSubmit && "cursor-not-allowed opacity-50",
           direction === "BUY"
             ? "bg-success text-white hover:brightness-110"
             : "bg-danger text-white hover:brightness-110",

@@ -6,11 +6,17 @@ import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import {
   injectedWallet,
   metaMaskWallet,
+  phantomWallet,
   walletConnectWallet,
 } from "@rainbow-me/rainbowkit/wallets";
 
 const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? "";
 const sepoliaRpc = process.env.NEXT_PUBLIC_SEPOLIA_RPC;
+const browserWallets = [phantomWallet, injectedWallet, metaMaskWallet];
+
+if (typeof window !== "undefined" && projectId) {
+  browserWallets.push(walletConnectWallet);
+}
 
 export const wagmiConfig = getDefaultConfig({
   appName: "Alphavault — Web3 Copy Trading",
@@ -18,7 +24,7 @@ export const wagmiConfig = getDefaultConfig({
   wallets: [
     {
       groupName: "Wallets",
-      wallets: [injectedWallet, metaMaskWallet, walletConnectWallet],
+      wallets: browserWallets,
     },
   ],
   chains: [foundry, sepolia, mainnet, arbitrum, base],
@@ -29,5 +35,5 @@ export const wagmiConfig = getDefaultConfig({
     [arbitrum.id]: http(),
     [base.id]: http(),
   },
-  ssr: false,
+  ssr: true,
 });

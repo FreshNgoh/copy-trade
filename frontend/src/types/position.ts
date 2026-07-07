@@ -21,6 +21,7 @@ export interface CreatePositionDTO {
   direction: "LONG" | "SHORT";
   entry_price: number;
   leverage: number;
+  liquidation_price?: number;
   stop_loss: number | null;
   take_profit: number | null;
 }

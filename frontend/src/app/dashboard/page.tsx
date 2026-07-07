@@ -5,36 +5,110 @@ import Link from "next/link";
 import { useAccount } from "wagmi";
 import { DepositUSDC } from "@/components/wallet/deposit-usdc";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { ACTIVE_POSITIONS, RECENT_ACTIVITY, TRADERS } from "@/lib/mock-data";
-import { cn } from "@/lib/utils";
 import {
-  Wallet,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Pause,
-  X,
-} from "lucide-react";
+  ensureTraderPortfolioApi,
+  getTraderDashboardApi,
+} from "@/lib/api/trader-dashboard-api";
+import type {
+  TraderDashboard,
+  TraderDashboardActivity,
+  TraderDashboardPosition,
+} from "@/types/trader-dashboard";
+import { cn } from "@/lib/utils";
+import { Wallet, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
 
-const PORTFOLIO = {
-  totalValue: 24840.21,
-  pnl24h: 412.84,
-  pnl24hPct: 1.69,
-  margin: 8420,
-  free: 16420.21,
-  copyAllocated: 4200,
+const emptyDashboard: TraderDashboard = {
+  trader_wallet_address: "",
+  portfolio: null,
+  stats: {
+    totalPortfolioValue: 0,
+    walletBalance: 0,
+    realizedPnl: 0,
+    marginUsed: 0,
+    freeCollateral: 0,
+    openPositionValue: 0,
+    openPositionsCount: 0,
+    openOrdersCount: 0,
+    closedTradesCount: 0,
+    followers: 0,
+    winRate: 0,
+    averageRoi: 0,
+  },
+  activePositions: [],
+  closedPositions: [],
+  openOrders: [],
+  recentActivity: [],
 };
 
-const COPIED = TRADERS.slice(0, 3).map((t, i) => ({
-  trader: t,
-  allocated: [2000, 1200, 1000][i],
-  active: i !== 1,
-  trades24h: [4, 0, 7][i],
-}));
+function formatUsd(value: number) {
+  const prefix = value < 0 ? "-$" : "$";
+
+  return `${prefix}${Math.abs(value).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatDateTime(value: string) {
+  if (!value) return "-";
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function getPositionNotional(position: TraderDashboardPosition) {
+  return Number(position.entry_price) * Number(position.quantity);
+}
+
+function getPositionPnl(position: TraderDashboardPosition) {
+  return Number(position.Pnl ?? 0);
+}
+
+function getActivityTone(activity: TraderDashboardActivity) {
+  if (activity.type === "POSITION_CLOSE") return "border-success text-success";
+  if (activity.type === "ORDER_OPEN") return "border-accent text-accent";
+  return "border-border text-muted-foreground";
+}
 
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
   const [depositOpen, setDepositOpen] = React.useState(false);
+  const [dashboard, setDashboard] =
+    React.useState<TraderDashboard>(emptyDashboard);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const loadDashboard = React.useCallback(async () => {
+    if (!address) {
+      setDashboard(emptyDashboard);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await ensureTraderPortfolioApi(address);
+      const data = await getTraderDashboardApi(address);
+      setDashboard(data);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch trader dashboard",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [address]);
+
+  React.useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const stats = dashboard.stats;
 
   return (
     <div data-testid="dashboard-page" className="bg-background min-h-screen">
@@ -82,7 +156,12 @@ export default function DashboardPage() {
             side="right"
             className="w-full sm:max-w-[440px] p-0 bg-surface border-border text-white overflow-y-auto"
           >
-            <DepositUSDC onSuccess={() => setDepositOpen(false)} />
+            <DepositUSDC
+              onSuccess={() => {
+                setDepositOpen(false);
+                loadDashboard();
+              }}
+            />
           </SheetContent>
         </Sheet>
 
@@ -91,23 +170,25 @@ export default function DashboardPage() {
           {[
             {
               label: "Total Portfolio Value",
-              value: `$${PORTFOLIO.totalValue.toLocaleString()}`,
+              value: formatUsd(stats.totalPortfolioValue),
               mono: true,
             },
             {
-              label: "24h PnL",
-              value: `+$${PORTFOLIO.pnl24h.toFixed(2)} (+${PORTFOLIO.pnl24hPct}%)`,
+              label: "Realized PnL",
+              value: `${stats.realizedPnl >= 0 ? "+" : ""}${formatUsd(
+                stats.realizedPnl,
+              )}`,
               mono: true,
-              accent: "text-success",
+              accent: stats.realizedPnl >= 0 ? "text-success" : "text-danger",
             },
             {
               label: "Margin Used",
-              value: `$${PORTFOLIO.margin.toLocaleString()}`,
+              value: formatUsd(stats.marginUsed),
               mono: true,
             },
             {
               label: "Free Collateral",
-              value: `$${PORTFOLIO.free.toLocaleString()}`,
+              value: formatUsd(stats.freeCollateral),
               mono: true,
             },
           ].map((s) => (
@@ -128,7 +209,7 @@ export default function DashboardPage() {
           <div className="lg:col-span-2 bg-surface border border-border">
             <div className="px-5 py-3 border-b border-border flex items-center justify-between">
               <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                ▎ Active Positions ({ACTIVE_POSITIONS.length})
+                ▎ Active Positions ({dashboard.activePositions.length})
               </span>
               <Link
                 href="/trade"
@@ -142,62 +223,64 @@ export default function DashboardPage() {
               <table className="w-full" data-testid="positions-table">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground border-b border-border">
-                    <th className="text-left px-4 py-2.5">Pair</th>
-                    <th className="text-left px-4 py-2.5">Side</th>
-                    <th className="text-right px-4 py-2.5">Size</th>
+                    <th className="text-left px-4 py-2.5">Symbol</th>
+                    <th className="text-left px-4 py-2.5">Direction</th>
+                    <th className="text-right px-4 py-2.5">Quantity</th>
                     <th className="text-right px-4 py-2.5">Entry</th>
-                    <th className="text-right px-4 py-2.5">Mark</th>
                     <th className="text-right px-4 py-2.5">PnL</th>
                     <th className="text-right px-4 py-2.5">Source</th>
                     <th className="px-4 py-2.5" />
                   </tr>
                 </thead>
                 <tbody>
-                  {ACTIVE_POSITIONS.map((p) => (
+                  {dashboard.activePositions.map((p) => (
                     <tr
-                      key={p.id}
+                      key={p.position_id}
                       className="border-b border-border hover:bg-surface-hover"
                     >
-                      <td className="px-4 py-3 font-mono text-sm">{p.pair}</td>
+                      <td className="px-4 py-3 font-mono text-sm">
+                        {p.symbol}
+                      </td>
                       <td className="px-4 py-3">
                         <span
                           className={cn(
                             "text-[10px] font-mono uppercase px-1.5 py-0.5 border",
-                            p.side === "LONG"
+                            p.direction === "LONG"
                               ? "border-success text-success bg-success/10"
                               : "border-danger text-danger bg-danger/10",
                           )}
                         >
-                          {p.side} · {p.leverage}×
+                          {p.direction} · {p.leverage}×
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-sm">
-                        ${p.size.toLocaleString()}
+                        {Number(p.quantity).toFixed(3)}
+                        {" " + p.symbol.split("/")[0]}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground">
-                        ${p.entry.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono text-sm">
-                        ${p.mark.toLocaleString()}
+                        {formatUsd(Number(p.entry_price))}
                       </td>
                       <td
                         className={cn(
                           "px-4 py-3 text-right font-mono text-sm",
-                          p.pnl >= 0 ? "text-success" : "text-danger",
+                          getPositionPnl(p) >= 0
+                            ? "text-success"
+                            : "text-danger",
                         )}
                       >
-                        {p.pnl >= 0 ? "+" : ""}${p.pnl.toFixed(2)} (
-                        {p.pnlPct >= 0 ? "+" : ""}
-                        {p.pnlPct.toFixed(2)}%)
+                        {getPositionPnl(p) >= 0 ? "+" : ""}
+                        {formatUsd(getPositionPnl(p))}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
-                        {p.copiedFrom ? `↻ ${p.copiedFrom}` : "Manual"}
+                        Manual
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
-                          data-testid={`close-position-${p.id}`}
+                          data-testid={`close-position-${p.position_id}`}
                           onClick={() =>
-                            toast.success(`Position ${p.pair} close requested`)
+                            toast.success(
+                              `Position ${p.symbol} close requested`,
+                            )
                           }
                           className="text-[10px] uppercase font-mono border border-border px-2 py-1 hover:border-danger hover:text-danger"
                         >
@@ -208,6 +291,11 @@ export default function DashboardPage() {
                   ))}
                 </tbody>
               </table>
+              {!isLoading && dashboard.activePositions.length === 0 && (
+                <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+                  No active positions.
+                </div>
+              )}
             </div>
           </div>
 
@@ -236,99 +324,75 @@ export default function DashboardPage() {
                 <span className="text-[10px] uppercase font-mono text-muted-foreground">
                   USDC
                 </span>
-                <span className="font-mono text-sm">12,400.00</span>
+                <span className="font-mono text-sm">
+                  {stats.walletBalance.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                  ETH
+                  Positions
                 </span>
-                <span className="font-mono text-sm">3.4521</span>
+                <span className="font-mono text-sm">
+                  {stats.openPositionsCount}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                  Copy Allocated
+                  Followers
                 </span>
-                <span className="font-mono text-sm">$4,200</span>
+                <span className="font-mono text-sm">
+                  {stats.followers.toLocaleString()}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Copied traders & activity */}
+        {/* Trader stats & activity */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-surface border border-border">
             <div className="px-5 py-3 border-b border-border">
               <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                ▎ Copied Traders ({COPIED.length})
+                ▎ Trader Performance
               </span>
             </div>
-            <div>
-              {COPIED.map((c) => (
-                <div
-                  key={c.trader.id}
-                  className="px-5 py-4 border-b border-border last:border-0 flex items-center gap-4"
-                  data-testid={`copied-trader-${c.trader.ens}`}
-                >
-                  <div className="w-10 h-10 overflow-hidden border border-border flex-shrink-0">
-                    <img
-                      src={c.trader.avatar}
-                      alt={c.trader.ens}
-                      className="w-full h-full object-cover"
-                    />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border">
+              {[
+                {
+                  label: "Followers",
+                  value: stats.followers.toLocaleString(),
+                },
+                {
+                  label: "Win Rate",
+                  value: `${stats.winRate.toFixed(1)}%`,
+                },
+                {
+                  label: "Avg ROI",
+                  value: `${stats.averageRoi >= 0 ? "+" : ""}${stats.averageRoi.toFixed(2)}%`,
+                  accent:
+                    stats.averageRoi >= 0 ? "text-success" : "text-danger",
+                },
+                {
+                  label: "Open Orders",
+                  value: stats.openOrdersCount.toString(),
+                },
+              ].map((item) => (
+                <div key={item.label} className="bg-surface p-5">
+                  <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-2">
+                    {item.label}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm truncate">
-                        {c.trader.ens}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 border",
-                          c.active
-                            ? "border-success text-success bg-success/10"
-                            : "border-muted-foreground text-muted-foreground",
-                        )}
-                      >
-                        {c.active ? "ACTIVE" : "PAUSED"}
-                      </span>
-                    </div>
-                    <div className="font-mono text-xs text-muted-foreground mt-0.5">
-                      ${c.allocated.toLocaleString()} allocated · {c.trades24h}{" "}
-                      trades today
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-mono text-sm text-success">
-                      +${((c.allocated * c.trader.roi30d) / 100).toFixed(0)}
-                    </div>
-                    <div className="text-[10px] uppercase font-mono text-muted-foreground">
-                      30D PnL
-                    </div>
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      data-testid={`pause-${c.trader.ens}`}
-                      onClick={() =>
-                        toast.success(
-                          `${c.active ? "Paused" : "Resumed"} copying ${c.trader.ens}`,
-                        )
-                      }
-                      className="w-8 h-8 border border-border hover:border-border-focus flex items-center justify-center"
-                    >
-                      <Pause className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      data-testid={`stop-${c.trader.ens}`}
-                      onClick={() =>
-                        toast.success(`Stopped copying ${c.trader.ens}`)
-                      }
-                      className="w-8 h-8 border border-border hover:border-danger hover:text-danger flex items-center justify-center"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                  <div className={cn("font-mono text-xl", item.accent)}>
+                    {item.value}
                   </div>
                 </div>
               ))}
+            </div>
+            <div className="px-5 py-4 border-t border-border text-xs text-muted-foreground">
+              Dashboard data is loaded from your `portfolio`, `positions`, and
+              `orders` tables.
             </div>
           </div>
 
@@ -339,7 +403,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <div data-testid="activity-feed">
-              {RECENT_ACTIVITY.map((a) => (
+              {dashboard.recentActivity.map((a) => (
                 <div
                   key={a.id}
                   className="px-5 py-3 border-b border-border last:border-0 text-xs"
@@ -348,27 +412,27 @@ export default function DashboardPage() {
                     <span
                       className={cn(
                         "text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 border",
-                        a.type === "COPY_OPEN"
-                          ? "border-accent text-accent"
-                          : a.type === "TRADE_CLOSE"
-                            ? "border-success text-success"
-                            : a.type === "DEPOSIT"
-                              ? "border-warning text-warning"
-                              : "border-border text-muted-foreground",
+                        getActivityTone(a),
                       )}
                     >
                       {a.type.replace("_", " ")}
                     </span>
                     <span className="text-[10px] font-mono text-muted-foreground">
-                      {a.time}
+                      {formatDateTime(a.created_at)}
                     </span>
                   </div>
                   <div className="mt-1.5 leading-relaxed">{a.detail}</div>
                   <div className="font-mono text-[10px] text-muted-foreground mt-1">
-                    ↳ {a.trader} · <span className="text-accent">{a.tx}</span>
+                    {a.direction} ·{" "}
+                    <span className="text-accent">{a.symbol}</span>
                   </div>
                 </div>
               ))}
+              {!isLoading && dashboard.recentActivity.length === 0 && (
+                <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+                  No recent activity.
+                </div>
+              )}
             </div>
           </div>
         </div>

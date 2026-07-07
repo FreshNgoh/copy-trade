@@ -18,6 +18,7 @@ export class PositionRepository {
         leverage: data.leverage,
         stop_loss: data.stop_loss,
         take_profit: data.take_profit,
+        liquidation_price: data.liquidation_price,
         created_at: new Date(),
         updated_at: new Date(),
         status: "OPEN",
@@ -139,16 +140,19 @@ export class PositionRepository {
     position_id,
     quantity,
     entry_price,
+    liquidation_price,
   }: {
     position_id: string;
     quantity: number;
     entry_price: number;
+    liquidation_price: number;
   }) {
     const { data, error } = await supabase
       .from("positions")
       .update({
         quantity,
         entry_price,
+        liquidation_price,
         updated_at: new Date().toISOString(),
       })
       .eq("position_id", position_id)

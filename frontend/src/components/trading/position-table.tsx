@@ -126,7 +126,7 @@ export function PositionsTable({
                   ${Number(markPrice).toFixed(2)}
                 </td>
                 <td className="px-4 py-2.5 text-right font-mono text-sm text-warning">
-                  {/* ${Number(p.liquidation_price.toLocaleString())} */}
+                  ${Number(p.liquidation_price.toFixed(2))}
                 </td>
                 <td
                   className={cn(

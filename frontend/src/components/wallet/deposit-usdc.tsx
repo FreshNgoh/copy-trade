@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { wagmiConfig } from "@/lib/wagmi";
+import { addTraderDepositApi } from "@/lib/api/trader-dashboard-api";
 import { CONTRACTS } from "@/lib/web3/constants/contracts";
 import usdc from "@/lib/web3/abi/usdc-abi.json";
 import vault from "@/lib/web3/abi/vault-abi.json";
@@ -95,6 +96,11 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
       });
 
       await waitForTransactionReceipt(wagmiConfig, { hash: depositHash });
+
+      await addTraderDepositApi({
+        traderWalletAddress: address,
+        amount: Number(amount),
+      });
 
       toast.success("Deposit successful");
 
