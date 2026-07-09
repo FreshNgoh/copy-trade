@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract MarginVault {
     IERC20 public immutable usdc;
@@ -21,11 +21,7 @@ contract MarginVault {
     function deposit(uint256 amount) external {
         require(amount > 0, "Invalid amount");
 
-        bool success = usdc.transferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
+        bool success = usdc.transferFrom(msg.sender, address(this), amount);
 
         require(success, "Transfer failed");
 
