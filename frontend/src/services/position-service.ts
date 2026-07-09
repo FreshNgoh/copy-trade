@@ -6,11 +6,24 @@ import type {
   CreatePositionDTO,
   UpdatePosition,
 } from "@/types/position";
+import {
+  storeTradeHistoryRecord,
+  stringToBytes32,
+  toScaledInteger,
+  toUnixTimestamp,
+} from "@/lib/web3/trade-history/server";
 
 function toNumber(value: unknown) {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : 0;
 }
+
+const TRADE_HISTORY_DECIMALS = {
+  quantity: 6,
+  price: 2,
+  pnl: 2,
+  roi: 4,
+} as const;
 
 function getPositionInitialMargin(position) {
   const leverage = toNumber(position.leverage);
@@ -42,6 +55,61 @@ async function syncOpenPositionCount(traderWalletAddress: string) {
     traderWalletAddress,
     positions: openPositions.length,
   });
+}
+
+async function syncClosedPositionToChain(
+  position,
+  options: { throwOnError?: boolean } = {},
+) {
+  const lockedForSync = await positionRepository.markOnChainSyncing(
+    position.position_id,
+  );
+
+  if (!lockedForSync) return;
+
+  try {
+    const result = await storeTradeHistoryRecord({
+      user: position.trader_wallet_address,
+      openTime: toUnixTimestamp(position.created_at),
+      closedTime: toUnixTimestamp(position.updated_at),
+      direction: position.direction === "LONG" ? 0 : 1,
+      quantityDecimals: TRADE_HISTORY_DECIMALS.quantity,
+      priceDecimals: TRADE_HISTORY_DECIMALS.price,
+      pnlDecimals: TRADE_HISTORY_DECIMALS.pnl,
+      roiDecimals: TRADE_HISTORY_DECIMALS.roi,
+      symbol: stringToBytes32(position.symbol),
+      quantity: toScaledInteger(position.quantity, TRADE_HISTORY_DECIMALS.quantity),
+      entryPrice: toScaledInteger(position.entry_price, TRADE_HISTORY_DECIMALS.price),
+      closingPrice: toScaledInteger(
+        position.closing_price,
+        TRADE_HISTORY_DECIMALS.price,
+      ),
+      pnl: toScaledInteger(position.Pnl, TRADE_HISTORY_DECIMALS.pnl),
+      roi: toScaledInteger(position.Roi, TRADE_HISTORY_DECIMALS.roi),
+    });
+
+    await positionRepository.saveOnChainSyncSuccess({
+      positionId: position.position_id,
+      tradeId: result.tradeId,
+      txHash: result.txHash,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    await positionRepository.saveOnChainSyncFailure({
+      positionId: position.position_id,
+      errorMessage,
+    });
+
+    if (options.throwOnError) {
+      throw error;
+    }
+
+    console.error("TradeHistory on-chain sync failed:", {
+      positionId: position.position_id,
+      error: errorMessage,
+    });
+  }
 }
 
 export async function assertSufficientFreeCollateral(data: CreatePositionDTO) {
@@ -132,8 +200,33 @@ export async function closePosition(position: ClosePositionDTO) {
   const closedPosition = await positionRepository.closePosition(position);
 
   await syncOpenPositionCount(position.trader_wallet_address);
+  await syncClosedPositionToChain(closedPosition);
 
   return closedPosition;
+}
+
+export async function syncClosedPositionById({
+  positionId,
+  traderWalletAddress,
+}: {
+  positionId: string;
+  traderWalletAddress: string;
+}) {
+  const closedPosition = await positionRepository.getClosedPositionById({
+    positionId,
+    traderWalletAddress,
+  });
+
+  if (!closedPosition) {
+    throw new Error("Closed position not found");
+  }
+
+  await syncClosedPositionToChain(closedPosition, { throwOnError: true });
+
+  return positionRepository.getClosedPositionById({
+    positionId,
+    traderWalletAddress,
+  });
 }
 
 export async function getClosedPositions(traderWalletAddress: string) {

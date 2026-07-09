@@ -71,15 +71,98 @@ export class PositionRepository {
         Roi: data.Roi,
       })
       .eq("position_id", data.position_id)
-      .eq("trader_wallet_address", data.trader_wallet_address)
+      .ilike("trader_wallet_address", data.trader_wallet_address)
       .eq("status", "OPEN")
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw error;
     }
+
+    if (!position) {
+      const existingClosedPosition = await this.getClosedPositionById({
+        positionId: data.position_id,
+        traderWalletAddress: data.trader_wallet_address,
+      });
+
+      if (existingClosedPosition) {
+        return existingClosedPosition;
+      }
+
+      throw new Error(
+        "Open position not found. It may already be closed, or the wallet address does not match this position.",
+      );
+    }
+
     return position;
+  }
+
+  async markOnChainSyncing(positionId: string) {
+    const { data, error } = await supabase
+      .from("positions")
+      .update({
+        on_chain_syncing: true,
+        on_chain_sync_error: null,
+      })
+      .eq("position_id", positionId)
+      .eq("status", "CLOSED")
+      .or("on_chain_synced.is.null,on_chain_synced.eq.false")
+      .or("on_chain_syncing.is.null,on_chain_syncing.eq.false")
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return Boolean(data);
+  }
+
+  async saveOnChainSyncSuccess({
+    positionId,
+    tradeId,
+    txHash,
+  }: {
+    positionId: string;
+    tradeId: string;
+    txHash: string;
+  }) {
+    const { error } = await supabase
+      .from("positions")
+      .update({
+        on_chain_synced: true,
+        on_chain_syncing: false,
+        on_chain_trade_id: tradeId,
+        on_chain_tx_hash: txHash,
+        on_chain_synced_at: new Date().toISOString(),
+        on_chain_sync_error: null,
+      })
+      .eq("position_id", positionId);
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  async saveOnChainSyncFailure({
+    positionId,
+    errorMessage,
+  }: {
+    positionId: string;
+    errorMessage: string;
+  }) {
+    const { error } = await supabase
+      .from("positions")
+      .update({
+        on_chain_syncing: false,
+        on_chain_sync_error: errorMessage,
+      })
+      .eq("position_id", positionId);
+
+    if (error) {
+      throw error;
+    }
   }
 
   async getClosedPositions(traderWalletAddress: string) {
@@ -96,6 +179,51 @@ export class PositionRepository {
     return positions;
   }
 
+  async getClosedPositionById({
+    positionId,
+    traderWalletAddress,
+  }: {
+    positionId: string;
+    traderWalletAddress: string;
+  }) {
+    const { data: position, error } = await supabase
+      .from("positions")
+      .select("*")
+      .eq("position_id", positionId)
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .eq("status", "CLOSED")
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return position;
+  }
+
+  async getOnChainSyncStatus({
+    positionId,
+    traderWalletAddress,
+  }: {
+    positionId: string;
+    traderWalletAddress: string;
+  }) {
+    const { data: position, error } = await supabase
+      .from("positions")
+      .select(
+        "position_id,status,trader_wallet_address,on_chain_synced,on_chain_syncing,on_chain_trade_id,on_chain_tx_hash,on_chain_synced_at,on_chain_sync_error",
+      )
+      .eq("position_id", positionId)
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return position;
+  }
+
   async updatePosition(data: UpdatePosition) {
     const { data: positions, error } = await supabase
       .from("positions")
@@ -104,7 +232,7 @@ export class PositionRepository {
         stop_loss: data.stop_loss,
       })
       .eq("position_id", data.position_id)
-      .eq("trader_wallet_address", data.trader_wallet_address)
+      .ilike("trader_wallet_address", data.trader_wallet_address)
       .select()
       .single();
     if (error) {

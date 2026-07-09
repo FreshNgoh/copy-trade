@@ -64,3 +64,17 @@ $ forge --help
 $ anvil --help
 $ cast --help
 ```
+
+### Flow
+
+User closes trade
+↓
+Web2 database marks order as closed
+↓
+Backend detects closed order
+↓
+Backend prepares TradeRecord
+↓
+Backend wallet signs transaction
+↓
+Smart contract stores trade history
