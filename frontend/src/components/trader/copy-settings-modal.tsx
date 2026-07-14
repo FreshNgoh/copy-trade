@@ -1,6 +1,9 @@
 'use client';
 
 import * as React from 'react';
+import { parseUnits, type Abi } from 'viem';
+import { waitForTransactionReceipt } from 'wagmi/actions';
+import { useAccount, useWriteContract } from 'wagmi';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -9,6 +12,11 @@ import { toast } from 'sonner';
 import type { Trader } from '@/lib/mock-data';
 import { Shield, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
+import { wagmiConfig } from '@/lib/wagmi';
+import { CONTRACTS } from '@/lib/web3/constants/contracts';
+import copyTrading from '@/lib/web3/abi/copy-trading-abi.json';
+
+const copyTradingAbi = copyTrading.abi as Abi;
 
 export function CopySettingsModal({
   open,
@@ -24,16 +32,60 @@ export function CopySettingsModal({
   const [stopLoss, setStopLoss] = React.useState([20]);
   const [maxTrades, setMaxTrades] = React.useState([10]);
   const [submitting, setSubmitting] = React.useState(false);
+  const { address, isConnected, chain } = useAccount();
+  const { writeContractAsync, isPending } = useWriteContract();
 
-  const handleConfirm = () => {
-    setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+  const handleConfirm = async () => {
+    if (!CONTRACTS.copyTrading) {
+      toast.error('Copy trading contract is not configured');
+      return;
+    }
+
+    if (!isConnected || !address) {
+      toast.error('Wallet not connected');
+      return;
+    }
+
+    if (!chain) {
+      toast.error('Wallet chain not detected');
+      return;
+    }
+
+    if (!investment || investment <= 0) {
+      toast.error('Enter valid investment amount');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const hash = await writeContractAsync({
+        address: CONTRACTS.copyTrading,
+        abi: copyTradingAbi,
+        functionName: 'setCopySettings',
+        args: [
+          trader.address,
+          parseUnits(String(investment), 6),
+          allocation[0] * 100,
+          stopLoss[0] * 100,
+          maxTrades[0],
+          true,
+        ],
+        account: address,
+        chain,
+      });
+
+      await waitForTransactionReceipt(wagmiConfig, { hash });
+
       onOpenChange(false);
       toast.success(`Now copying ${trader.ens}`, {
         description: `$${investment.toLocaleString()} allocated. ${allocation[0]}% per trade. Stop-loss at ${stopLoss[0]}%.`,
       });
-    }, 800);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Copy settings failed');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -150,10 +202,10 @@ export function CopySettingsModal({
           <Button
             data-testid="copy-confirm-button"
             onClick={handleConfirm}
-            disabled={submitting}
+            disabled={submitting || isPending}
             className="flex-1 rounded-none bg-accent text-accent-foreground hover:bg-accent/90 font-medium"
           >
-            {submitting ? 'Signing…' : 'Confirm Copy'}
+            {submitting || isPending ? 'Signing…' : 'Confirm Copy'}
           </Button>
         </div>
       </DialogContent>
