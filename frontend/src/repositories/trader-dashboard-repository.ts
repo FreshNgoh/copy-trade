@@ -29,6 +29,7 @@ export class TraderDashboardRepository {
         trader_id: randomUUID(),
         trader_wallet_address: traderWalletAddress,
         wallet_balance: 0,
+        copy_wallet_balance: 0,
         positions: 0,
         followers: 0,
       })
@@ -68,6 +69,156 @@ export class TraderDashboardRepository {
     return updatedPortfolio;
   }
 
+  async subtractWalletBalance({
+    traderWalletAddress,
+    amount,
+  }: {
+    traderWalletAddress: string;
+    amount: number;
+  }) {
+    const portfolio = await this.ensurePortfolio(traderWalletAddress);
+    const currentBalance = Number(portfolio.wallet_balance || 0);
+
+    if (amount > currentBalance) {
+      throw new Error("Insufficient wallet balance");
+    }
+
+    const { data: updatedPortfolio, error } = await supabase
+      .from("portfolio")
+      .update({
+        wallet_balance: currentBalance - amount,
+      })
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return updatedPortfolio;
+  }
+
+  async addCopyWalletBalance({
+    traderWalletAddress,
+    amount,
+  }: {
+    traderWalletAddress: string;
+    amount: number;
+  }) {
+    const portfolio = await this.ensurePortfolio(traderWalletAddress);
+    const nextBalance = Number(portfolio.copy_wallet_balance || 0) + amount;
+
+    const { data: updatedPortfolio, error } = await supabase
+      .from("portfolio")
+      .update({
+        copy_wallet_balance: nextBalance,
+      })
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return updatedPortfolio;
+  }
+
+  async subtractCopyWalletBalance({
+    traderWalletAddress,
+    amount,
+  }: {
+    traderWalletAddress: string;
+    amount: number;
+  }) {
+    const portfolio = await this.ensurePortfolio(traderWalletAddress);
+    const currentBalance = Number(portfolio.copy_wallet_balance || 0);
+
+    if (amount > currentBalance) {
+      throw new Error("Insufficient copy wallet balance");
+    }
+
+    const { data: updatedPortfolio, error } = await supabase
+      .from("portfolio")
+      .update({
+        copy_wallet_balance: currentBalance - amount,
+      })
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return updatedPortfolio;
+  }
+
+  async moveWalletToCopyWallet({
+    traderWalletAddress,
+    amount,
+  }: {
+    traderWalletAddress: string;
+    amount: number;
+  }) {
+    const portfolio = await this.ensurePortfolio(traderWalletAddress);
+    const mainBalance = Number(portfolio.wallet_balance || 0);
+    const copyBalance = Number(portfolio.copy_wallet_balance || 0);
+
+    if (amount > mainBalance) {
+      throw new Error("Insufficient main wallet balance for copy allocation");
+    }
+
+    const { data: updatedPortfolio, error } = await supabase
+      .from("portfolio")
+      .update({
+        wallet_balance: mainBalance - amount,
+        copy_wallet_balance: copyBalance + amount,
+      })
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return updatedPortfolio;
+  }
+
+  async moveCopyWalletToWallet({
+    traderWalletAddress,
+    amount,
+  }: {
+    traderWalletAddress: string;
+    amount: number;
+  }) {
+    const portfolio = await this.ensurePortfolio(traderWalletAddress);
+    const mainBalance = Number(portfolio.wallet_balance || 0);
+    const copyBalance = Number(portfolio.copy_wallet_balance || 0);
+
+    if (amount > copyBalance) {
+      throw new Error("Insufficient copy wallet balance");
+    }
+
+    const { data: updatedPortfolio, error } = await supabase
+      .from("portfolio")
+      .update({
+        wallet_balance: mainBalance + amount,
+        copy_wallet_balance: copyBalance - amount,
+      })
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return updatedPortfolio;
+  }
+
   async updateOpenPositionCount({
     traderWalletAddress,
     positions,
@@ -81,6 +232,31 @@ export class TraderDashboardRepository {
       .from("portfolio")
       .update({
         positions,
+      })
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return portfolio;
+  }
+
+  async updateFollowerCount({
+    traderWalletAddress,
+    followers,
+  }: {
+    traderWalletAddress: string;
+    followers: number;
+  }) {
+    await this.ensurePortfolio(traderWalletAddress);
+
+    const { data: portfolio, error } = await supabase
+      .from("portfolio")
+      .update({
+        followers,
       })
       .ilike("trader_wallet_address", traderWalletAddress)
       .select()

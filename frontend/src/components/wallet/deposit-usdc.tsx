@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { parseUnits, formatUnits, type Abi } from "viem";
+import { formatEther, formatUnits, parseEther, type Abi } from "viem";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { toast } from "sonner";
@@ -18,11 +18,10 @@ import { cn } from "@/lib/utils";
 import { wagmiConfig } from "@/lib/wagmi";
 import { addTraderDepositApi } from "@/lib/api/trader-dashboard-api";
 import { CONTRACTS } from "@/lib/web3/constants/contracts";
-import usdc from "@/lib/web3/abi/usdc-abi.json";
 import vault from "@/lib/web3/abi/vault-abi.json";
 
-const usdcAbi = usdc.abi as Abi;
 const vaultAbi = vault.abi as Abi;
+const DEMO_ETH_USDC_PRICE = 3000;
 
 export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
   const { address, isConnected, chain } = useAccount();
@@ -30,6 +29,11 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
   const [step, setStep] = React.useState<"method" | "amount">("method");
 
   const { writeContractAsync, isPending } = useWriteContract();
+  const amountNumber = Number(amount);
+  const ethCost =
+    Number.isFinite(amountNumber) && amountNumber > 0
+      ? amountNumber / DEMO_ETH_USDC_PRICE
+      : 0;
 
   const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({
     address: CONTRACTS.vault,
@@ -69,30 +73,16 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
     }
 
     try {
-      const amountInUSDC = parseUnits(amount, 6);
-
-      toast.info("Approving USDC...");
-
-      const approveHash = await writeContractAsync({
-        address: CONTRACTS.usdc,
-        abi: usdcAbi,
-        functionName: "approve",
-        args: [CONTRACTS.vault, amountInUSDC],
-        account: address,
-        chain,
-      });
-
-      await waitForTransactionReceipt(wagmiConfig, { hash: approveHash });
-
-      toast.info("Depositing USDC...");
+      toast.info("Depositing Sepolia ETH...");
 
       const depositHash = await writeContractAsync({
         address: CONTRACTS.vault,
         abi: vaultAbi,
-        functionName: "deposit",
-        args: [amountInUSDC],
+        functionName: "depositEthAsUsdc",
+        args: [],
         account: address,
         chain,
+        value: parseEther(ethCost.toFixed(18)),
       });
 
       await waitForTransactionReceipt(wagmiConfig, { hash: depositHash });
@@ -137,10 +127,10 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="font-mono text-sm text-white">
-                  Deposit Crypto
+                  Deposit Sepolia ETH
                 </div>
                 <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                  Send USDC into your margin vault.
+                  Pay Sepolia ETH and receive virtual USDC trading balance.
                 </div>
               </div>
               <div className="font-mono text-[10px] uppercase tracking-wider text-accent">
@@ -151,7 +141,7 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
         </div>
 
         <div className="mt-auto border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground">
-          Only USDC deposits are supported for this vault right now.
+          Demo rate: 1 Sepolia ETH = {DEMO_ETH_USDC_PRICE.toLocaleString()} virtual USDC.
         </div>
       </div>
     );
@@ -169,11 +159,11 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
         </button>
         <div>
           <div className="mb-3 text-[10px] uppercase tracking-[0.2em] font-mono text-muted-foreground">
-            ▎ Deposit Crypto
+            ▎ Deposit Sepolia ETH
           </div>
-          <h2 className="font-heading text-2xl font-bold">Deposit USDC</h2>
+          <h2 className="font-heading text-2xl font-bold">Deposit Virtual USDC</h2>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Fund your vault with USDC margin collateral.
+            Enter the virtual USDC amount. Your wallet pays the Sepolia ETH equivalent.
           </p>
         </div>
       </div>
@@ -191,7 +181,7 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
           </div>
           <div className="inline-flex min-w-36 items-center gap-2 border border-border bg-background px-3 py-2">
             <CircleDollarSign className="h-4 w-4 text-accent" />
-            <span className="font-mono text-sm">USDC</span>
+            <span className="font-mono text-sm">Virtual USDC</span>
           </div>
         </div>
 
@@ -233,6 +223,12 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
               USDC
             </div>
           </div>
+          <div className="text-xs text-muted-foreground">
+            Estimated wallet debit:{" "}
+            <span className="font-mono text-white">
+              {ethCost > 0 ? `${ethCost.toFixed(6)} Sepolia ETH` : "0 Sepolia ETH"}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -249,6 +245,18 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
         </Button>
 
         <div className="mt-7 border-t border-border pt-6 space-y-3 text-sm">
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">Demo Rate</span>
+            <span className="font-mono text-right">
+              1 ETH = {DEMO_ETH_USDC_PRICE.toLocaleString()} USDC
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">ETH Required</span>
+            <span className="font-mono text-right">
+              {ethCost > 0 ? formatEther(parseEther(ethCost.toFixed(18))) : "0"} ETH
+            </span>
+          </div>
           <div className="flex justify-between gap-4">
             <span className="text-muted-foreground">Vault Balance</span>
             <span className="font-mono text-right">

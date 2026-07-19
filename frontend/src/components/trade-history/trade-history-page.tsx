@@ -21,9 +21,12 @@ import {
 type TradeRecord = {
   tradeId: bigint;
   user: Address;
+  master: Address;
+  follower: Address;
   openTime: bigint;
   closedTime: bigint;
   direction: number;
+  source: number;
   quantityDecimals: number;
   priceDecimals: number;
   pnlDecimals: number;
@@ -34,6 +37,9 @@ type TradeRecord = {
   closingPrice: bigint;
   pnl: bigint;
   roi: bigint;
+  grossPnl: bigint;
+  masterReward: bigint;
+  followerReward: bigint;
 };
 
 export function TradeHistoryPage() {
@@ -83,9 +89,12 @@ export function TradeHistoryPage() {
             return {
               tradeId,
               user: record.user,
+              master: record.master,
+              follower: record.follower,
               openTime: record.openTime,
               closedTime: record.closedTime,
               direction: record.direction,
+              source: record.source,
               quantityDecimals: record.quantityDecimals,
               priceDecimals: record.priceDecimals,
               pnlDecimals: record.pnlDecimals,
@@ -95,7 +104,10 @@ export function TradeHistoryPage() {
               entryPrice: record.entryPrice,
               closingPrice: record.closingPrice,
               pnl: record.pnl,
-              roi: record.roi
+              roi: record.roi,
+              grossPnl: record.grossPnl,
+              masterReward: record.masterReward,
+              followerReward: record.followerReward
             } satisfies TradeRecord;
           })
         );
@@ -198,11 +210,14 @@ function TradeHistoryTable({ records }: { records: TradeRecord[] }) {
           <tr className="border-b border-border font-mono text-[10px] uppercase text-muted-foreground">
             <th className="px-4 py-3 text-left">ID</th>
             <th className="px-4 py-3 text-left">Symbol</th>
+            <th className="px-4 py-3 text-left">Source</th>
             <th className="px-4 py-3 text-left">Direction</th>
             <th className="px-4 py-3 text-right">Quantity</th>
             <th className="px-4 py-3 text-right">Entry</th>
             <th className="px-4 py-3 text-right">Close</th>
             <th className="px-4 py-3 text-right">PnL</th>
+            <th className="px-4 py-3 text-right">Gross</th>
+            <th className="px-4 py-3 text-right">Split</th>
             <th className="px-4 py-3 text-right">ROI</th>
             <th className="px-4 py-3 text-right">Opened</th>
             <th className="px-4 py-3 text-right">Closed</th>
@@ -219,6 +234,9 @@ function TradeHistoryTable({ records }: { records: TradeRecord[] }) {
                   {record.tradeId.toString()}
                 </td>
                 <td className="px-4 py-3 font-mono text-sm text-white">{symbol}</td>
+                <td className="px-4 py-3">
+                  <TradeSourceBadge record={record} />
+                </td>
                 <td className="px-4 py-3">
                   <span
                     className={cn(
@@ -248,6 +266,14 @@ function TradeHistoryTable({ records }: { records: TradeRecord[] }) {
                 >
                   {formatPnl(record.pnl, record.pnlDecimals)}
                 </td>
+                <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground">
+                  {record.source === 0 ? "-" : formatPnl(record.grossPnl, record.pnlDecimals)}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
+                  {record.source === 0
+                    ? "-"
+                    : `M ${formatPnl(record.masterReward, record.pnlDecimals)} / F ${formatPnl(record.followerReward, record.pnlDecimals)}`}
+                </td>
                 <td
                   className={cn(
                     "px-4 py-3 text-right font-mono text-sm",
@@ -269,4 +295,30 @@ function TradeHistoryTable({ records }: { records: TradeRecord[] }) {
       </table>
     </div>
   );
+}
+
+function TradeSourceBadge({ record }: { record: TradeRecord }) {
+  if (record.source === 1) {
+    return (
+      <div className="font-mono text-xs">
+        <div className="text-accent">Copied</div>
+        <div className="text-[10px] text-muted-foreground">from {shortAddress(record.master)}</div>
+      </div>
+    );
+  }
+
+  if (record.source === 2) {
+    return (
+      <div className="font-mono text-xs">
+        <div className="text-success">Copy Reward</div>
+        <div className="text-[10px] text-muted-foreground">from {shortAddress(record.follower)}</div>
+      </div>
+    );
+  }
+
+  return <span className="font-mono text-xs text-muted-foreground">Own</span>;
+}
+
+function shortAddress(address: string) {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }

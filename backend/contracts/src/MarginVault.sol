@@ -9,6 +9,8 @@ contract MarginVault is AccessControl {
     using SafeERC20 for IERC20;
 
     bytes32 public constant MARGIN_MANAGER_ROLE = keccak256("MARGIN_MANAGER_ROLE");
+    uint256 public constant ETH_USDC_PRICE = 3_000e6;
+    uint256 public constant USDC_DECIMALS = 1e6;
 
     IERC20 public immutable usdc;
 
@@ -16,7 +18,9 @@ contract MarginVault is AccessControl {
     mapping(address => uint256) public usedMargin;
 
     event Deposited(address indexed user, uint256 amount);
+    event EthDeposited(address indexed user, uint256 ethAmount, uint256 usdcAmount);
     event Withdrawn(address indexed user, uint256 amount);
+    event EthWithdrawn(address indexed user, uint256 usdcAmount, uint256 ethAmount);
     event MarginLocked(address indexed user, uint256 amount);
     event MarginReleased(address indexed user, uint256 amount);
 
@@ -39,6 +43,18 @@ contract MarginVault is AccessControl {
         emit Deposited(msg.sender, amount);
     }
 
+    function depositEthAsUsdc() external payable {
+        require(msg.value > 0, "Invalid amount");
+
+        uint256 usdcAmount = ethToUsdc(msg.value);
+        require(usdcAmount > 0, "Deposit too small");
+
+        balances[msg.sender] += usdcAmount;
+
+        emit EthDeposited(msg.sender, msg.value, usdcAmount);
+        emit Deposited(msg.sender, usdcAmount);
+    }
+
     function withdraw(uint256 amount) external {
         require(amount > 0, "Invalid amount");
         require(availableBalance(msg.sender) >= amount, "Insufficient balance");
@@ -47,6 +63,22 @@ contract MarginVault is AccessControl {
 
         usdc.safeTransfer(msg.sender, amount);
 
+        emit Withdrawn(msg.sender, amount);
+    }
+
+    function withdrawUsdcAsEth(uint256 amount) external {
+        require(amount > 0, "Invalid amount");
+        require(availableBalance(msg.sender) >= amount, "Insufficient balance");
+
+        uint256 ethAmount = usdcToEth(amount);
+        require(address(this).balance >= ethAmount, "Insufficient vault ETH");
+
+        balances[msg.sender] -= amount;
+
+        (bool success,) = msg.sender.call{value: ethAmount}("");
+        require(success, "ETH transfer failed");
+
+        emit EthWithdrawn(msg.sender, amount, ethAmount);
         emit Withdrawn(msg.sender, amount);
     }
 
@@ -68,5 +100,13 @@ contract MarginVault is AccessControl {
         usedMargin[user] -= amount;
 
         emit MarginReleased(user, amount);
+    }
+
+    function ethToUsdc(uint256 ethAmount) public pure returns (uint256) {
+        return (ethAmount * ETH_USDC_PRICE) / 1 ether;
+    }
+
+    function usdcToEth(uint256 usdcAmount) public pure returns (uint256) {
+        return (usdcAmount * 1 ether) / ETH_USDC_PRICE;
     }
 }

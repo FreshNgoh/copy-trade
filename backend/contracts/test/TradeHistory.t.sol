@@ -16,7 +16,15 @@ contract TradeHistoryTest is Test {
     uint8 private constant DIRECTION_SHORT = 1;
 
     event TradeRecordStored(
-        uint256 indexed tradeId, address indexed user, address indexed writer, bytes32 symbol, int256 pnl, int256 roi
+        uint256 indexed tradeId,
+        address indexed user,
+        address indexed writer,
+        bytes32 symbol,
+        int256 pnl,
+        int256 roi,
+        uint8 source,
+        address master,
+        address follower
     );
 
     function setUp() public {
@@ -77,9 +85,12 @@ contract TradeHistoryTest is Test {
         TradeHistory.TradeRecord memory record = tradeHistory.getTradeRecord(tradeId);
 
         assertEq(record.user, user);
+        assertEq(record.master, address(0));
+        assertEq(record.follower, address(0));
         assertEq(record.openTime, 1_783_399_785);
         assertEq(record.closedTime, 1_783_400_255);
         assertEq(record.direction, tradeHistory.DIRECTION_SHORT());
+        assertEq(record.source, tradeHistory.SOURCE_OWN());
         assertEq(record.quantityDecimals, 6);
         assertEq(record.priceDecimals, 2);
         assertEq(record.pnlDecimals, 2);
@@ -90,6 +101,9 @@ contract TradeHistoryTest is Test {
         assertEq(record.closingPrice, 6_353_045);
         assertEq(record.pnl, 550);
         assertEq(record.roi, 8_600);
+        assertEq(record.grossPnl, 550);
+        assertEq(record.masterReward, 0);
+        assertEq(record.followerReward, 0);
     }
 
     function testEventEmission() public {
@@ -97,16 +111,19 @@ contract TradeHistoryTest is Test {
 
         vm.prank(backend);
         vm.expectEmit(true, true, true, true, address(tradeHistory));
-        emit TradeRecordStored(1, user, backend, BTC_USDC, 550, 8_600);
+        emit TradeRecordStored(1, user, backend, BTC_USDC, 550, 8_600, 0, address(0), address(0));
         tradeHistory.addTradeRecord(record);
     }
 
     function _sampleRecord(address recordUser) private pure returns (TradeHistory.TradeRecord memory) {
         return TradeHistory.TradeRecord({
             user: recordUser,
+            master: address(0),
+            follower: address(0),
             openTime: 1_783_399_785,
             closedTime: 1_783_400_255,
             direction: DIRECTION_SHORT,
+            source: 0,
             quantityDecimals: 6,
             priceDecimals: 2,
             pnlDecimals: 2,
@@ -116,7 +133,10 @@ contract TradeHistoryTest is Test {
             entryPrice: 6_364_060,
             closingPrice: 6_353_045,
             pnl: 550,
-            roi: 8_600
+            roi: 8_600,
+            grossPnl: 550,
+            masterReward: 0,
+            followerReward: 0
         });
     }
 }

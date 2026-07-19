@@ -19,6 +19,9 @@ export class PositionRepository {
         stop_loss: data.stop_loss,
         take_profit: data.take_profit,
         liquidation_price: data.liquidation_price,
+        trade_source: data.trade_source ?? "OWN",
+        copied_from_master: data.copied_from_master ?? null,
+        copy_trade_position_id: data.copy_trade_position_id ?? null,
         created_at: new Date(),
         updated_at: new Date(),
         status: "OPEN",
@@ -58,6 +61,41 @@ export class PositionRepository {
       throw error;
     }
     return positions;
+  }
+
+  async getOpenCopiedMargin({
+    followerWalletAddress,
+    masterWalletAddress,
+  }: {
+    followerWalletAddress: string;
+    masterWalletAddress?: string;
+  }) {
+    let query = supabase
+      .from("positions")
+      .select("quantity,entry_price,leverage")
+      .ilike("trader_wallet_address", followerWalletAddress)
+      .eq("trade_source", "COPY")
+      .eq("status", "OPEN");
+
+    if (masterWalletAddress) {
+      query = query.ilike("copied_from_master", masterWalletAddress);
+    }
+
+    const { data: positions, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    return (positions ?? []).reduce((total, position) => {
+      const leverage = Number(position.leverage);
+      if (leverage <= 0) return total;
+
+      return (
+        total +
+        (Number(position.quantity) * Number(position.entry_price)) / leverage
+      );
+    }, 0);
   }
 
   async closePosition(data: ClosePositionDTO) {
@@ -163,6 +201,39 @@ export class PositionRepository {
     if (error) {
       throw error;
     }
+  }
+
+  async markRewardsSettled({
+    positionId,
+    grossPnl,
+    masterReward,
+    followerReward,
+  }: {
+    positionId: string;
+    grossPnl: number;
+    masterReward: number;
+    followerReward: number;
+  }) {
+    const { data, error } = await supabase
+      .from("positions")
+      .update({
+        gross_pnl: grossPnl,
+        master_reward: masterReward,
+        follower_reward: followerReward,
+        rewards_settled: true,
+        reward_settled_at: new Date().toISOString(),
+      })
+      .eq("position_id", positionId)
+      .eq("status", "CLOSED")
+      .or("rewards_settled.is.null,rewards_settled.eq.false")
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return Boolean(data);
   }
 
   async getClosedPositions(traderWalletAddress: string) {
@@ -271,6 +342,7 @@ export class PositionRepository {
       .eq("symbol", symbol)
       .eq("direction", direction)
       .eq("status", "OPEN")
+      .eq("trade_source", "OWN")
       .maybeSingle();
 
     if (error) throw error;

@@ -4,10 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { DepositUSDC } from "@/components/wallet/deposit-usdc";
+import { WithdrawUSDC } from "@/components/wallet/withdraw-usdc";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   ensureTraderPortfolioApi,
   getTraderDashboardApi,
+  transferCopyWalletToManualApi,
 } from "@/lib/api/trader-dashboard-api";
 import type {
   TraderDashboard,
@@ -24,9 +26,14 @@ const emptyDashboard: TraderDashboard = {
   stats: {
     totalPortfolioValue: 0,
     walletBalance: 0,
+    copyWalletBalance: 0,
+    totalWalletBalance: 0,
     realizedPnl: 0,
     marginUsed: 0,
+    manualMarginUsed: 0,
+    copyMarginUsed: 0,
     freeCollateral: 0,
+    copyFreeCollateral: 0,
     openPositionValue: 0,
     openPositionsCount: 0,
     openOrdersCount: 0,
@@ -34,6 +41,36 @@ const emptyDashboard: TraderDashboard = {
     followers: 0,
     winRate: 0,
     averageRoi: 0,
+    manualPerformance: {
+      closedTradesCount: 0,
+      openPositionsCount: 0,
+      realizedPnl: 0,
+      grossPnl: 0,
+      masterRewards: 0,
+      followerRewards: 0,
+      winRate: 0,
+      averageRoi: 0,
+    },
+    copyPerformance: {
+      closedTradesCount: 0,
+      openPositionsCount: 0,
+      realizedPnl: 0,
+      grossPnl: 0,
+      masterRewards: 0,
+      followerRewards: 0,
+      winRate: 0,
+      averageRoi: 0,
+    },
+    allPerformance: {
+      closedTradesCount: 0,
+      openPositionsCount: 0,
+      realizedPnl: 0,
+      grossPnl: 0,
+      masterRewards: 0,
+      followerRewards: 0,
+      winRate: 0,
+      averageRoi: 0,
+    },
   },
   activePositions: [],
   closedPositions: [],
@@ -61,8 +98,21 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function shortAddress(address?: string | null) {
+  if (!address) return "-";
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
 function getPositionNotional(position: TraderDashboardPosition) {
   return Number(position.entry_price) * Number(position.quantity);
+}
+
+function getPositionSourceLabel(position: TraderDashboardPosition) {
+  if (position.trade_source === "COPY" || position.copied_from_master) {
+    return `Copied ${shortAddress(position.copied_from_master)}`;
+  }
+
+  return "Manual";
 }
 
 function getPositionPnl(position: TraderDashboardPosition) {
@@ -78,6 +128,11 @@ function getActivityTone(activity: TraderDashboardActivity) {
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
   const [depositOpen, setDepositOpen] = React.useState(false);
+  const [withdrawOpen, setWithdrawOpen] = React.useState(false);
+  const [transferCopyPending, setTransferCopyPending] = React.useState(false);
+  const [performanceView, setPerformanceView] = React.useState<
+    "all" | "manual" | "copy"
+  >("all");
   const [dashboard, setDashboard] =
     React.useState<TraderDashboard>(emptyDashboard);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -108,7 +163,41 @@ export default function DashboardPage() {
     loadDashboard();
   }, [loadDashboard]);
 
+  const transferCopyFreeToManual = async () => {
+    if (!address) {
+      toast.error("Wallet not connected");
+      return;
+    }
+
+    const amount = Number(dashboard.stats.copyFreeCollateral || 0);
+
+    if (amount <= 0) {
+      toast.error("No free copy wallet balance to transfer");
+      return;
+    }
+
+    try {
+      setTransferCopyPending(true);
+      await transferCopyWalletToManualApi({
+        traderWalletAddress: address,
+        amount,
+      });
+      toast.success(`Moved ${formatUsd(amount)} to manual wallet`);
+      await loadDashboard();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Transfer failed");
+    } finally {
+      setTransferCopyPending(false);
+    }
+  };
+
   const stats = dashboard.stats;
+  const selectedPerformance =
+    performanceView === "manual"
+      ? stats.manualPerformance
+      : performanceView === "copy"
+        ? stats.copyPerformance
+        : stats.allPerformance;
 
   return (
     <div data-testid="dashboard-page" className="bg-background min-h-screen">
@@ -142,7 +231,7 @@ export default function DashboardPage() {
             </button>
             <button
               data-testid="withdraw-button"
-              onClick={() => toast.info("Withdraw initiated")}
+              onClick={() => setWithdrawOpen(true)}
               className="inline-flex items-center gap-2 border border-border px-5 py-2.5 hover:border-border-focus text-sm"
             >
               <ArrowUpFromLine className="w-4 h-4" />
@@ -165,33 +254,49 @@ export default function DashboardPage() {
           </SheetContent>
         </Sheet>
 
+        <Sheet open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-[440px] p-0 bg-surface border-border text-white overflow-y-auto"
+          >
+            <WithdrawUSDC
+              onSuccess={() => {
+                setWithdrawOpen(false);
+                loadDashboard();
+              }}
+            />
+          </SheetContent>
+        </Sheet>
+
         {/* Top stats grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border">
-          {[
+          {([
             {
-              label: "Total Portfolio Value",
+              label: "Total Wallet Value",
               value: formatUsd(stats.totalPortfolioValue),
               mono: true,
             },
             {
-              label: "Realized PnL",
-              value: `${stats.realizedPnl >= 0 ? "+" : ""}${formatUsd(
-                stats.realizedPnl,
-              )}`,
-              mono: true,
-              accent: stats.realizedPnl >= 0 ? "text-success" : "text-danger",
-            },
-            {
-              label: "Margin Used",
-              value: formatUsd(stats.marginUsed),
+              label: "Manual Wallet",
+              value: formatUsd(stats.walletBalance),
               mono: true,
             },
             {
-              label: "Free Collateral",
+              label: "Copy Wallet",
+              value: formatUsd(stats.copyWalletBalance),
+              mono: true,
+            },
+            {
+              label: "Manual Free",
               value: formatUsd(stats.freeCollateral),
               mono: true,
             },
-          ].map((s) => (
+          ] as Array<{
+            label: string;
+            value: string;
+            mono: boolean;
+            accent?: string;
+          }>).map((s) => (
             <div key={s.label} className="bg-surface p-5">
               <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-2">
                 {s.label}
@@ -272,7 +377,7 @@ export default function DashboardPage() {
                         {formatUsd(getPositionPnl(p))}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
-                        Manual
+                        {getPositionSourceLabel(p)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
@@ -333,6 +438,43 @@ export default function DashboardPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-[10px] uppercase font-mono text-muted-foreground">
+                  Copy USDC
+                </span>
+                <span className="font-mono text-sm">
+                  {stats.copyWalletBalance.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px] uppercase font-mono text-muted-foreground">
+                  Copy Free
+                </span>
+                <span className="font-mono text-sm">
+                  {stats.copyFreeCollateral.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={transferCopyFreeToManual}
+                disabled={transferCopyPending || stats.copyFreeCollateral <= 0}
+                className={cn(
+                  "w-full border px-3 py-2 text-[10px] uppercase tracking-wider font-mono",
+                  stats.copyFreeCollateral > 0
+                    ? "border-accent text-accent hover:bg-accent/10"
+                    : "border-border text-muted-foreground cursor-not-allowed",
+                )}
+              >
+                {transferCopyPending
+                  ? "Transferring..."
+                  : "Move Copy Free to Manual"}
+              </button>
+              <div className="flex justify-between">
+                <span className="text-[10px] uppercase font-mono text-muted-foreground">
                   Positions
                 </span>
                 <span className="font-mono text-sm">
@@ -354,30 +496,60 @@ export default function DashboardPage() {
         {/* Trader stats & activity */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-surface border border-border">
-            <div className="px-5 py-3 border-b border-border">
+            <div className="px-5 py-3 border-b border-border flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
                 ▎ Trader Performance
               </span>
+              <div className="inline-flex w-fit border border-border bg-background p-0.5">
+                {[
+                  { id: "all", label: "All" },
+                  { id: "manual", label: "Manual" },
+                  { id: "copy", label: "Copy" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() =>
+                      setPerformanceView(item.id as "all" | "manual" | "copy")
+                    }
+                    className={cn(
+                      "px-3 py-1.5 text-[10px] uppercase tracking-wider font-mono",
+                      performanceView === item.id
+                        ? "bg-white text-black"
+                        : "text-muted-foreground hover:text-white",
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border">
               {[
                 {
-                  label: "Followers",
-                  value: stats.followers.toLocaleString(),
+                  label: "Closed Trades",
+                  value: selectedPerformance.closedTradesCount.toString(),
                 },
                 {
                   label: "Win Rate",
-                  value: `${stats.winRate.toFixed(1)}%`,
+                  value: `${selectedPerformance.winRate.toFixed(1)}%`,
                 },
                 {
                   label: "Avg ROI",
-                  value: `${stats.averageRoi >= 0 ? "+" : ""}${stats.averageRoi.toFixed(2)}%`,
+                  value: `${selectedPerformance.averageRoi >= 0 ? "+" : ""}${selectedPerformance.averageRoi.toFixed(2)}%`,
                   accent:
-                    stats.averageRoi >= 0 ? "text-success" : "text-danger",
+                    selectedPerformance.averageRoi >= 0
+                      ? "text-success"
+                      : "text-danger",
                 },
                 {
-                  label: "Open Orders",
-                  value: stats.openOrdersCount.toString(),
+                  label:
+                    performanceView === "copy" ? "Net Copy PnL" : "Realized PnL",
+                  value: `${selectedPerformance.realizedPnl >= 0 ? "+" : ""}${formatUsd(selectedPerformance.realizedPnl)}`,
+                  accent:
+                    selectedPerformance.realizedPnl >= 0
+                      ? "text-success"
+                      : "text-danger",
                 },
               ].map((item) => (
                 <div key={item.label} className="bg-surface p-5">
@@ -391,8 +563,15 @@ export default function DashboardPage() {
               ))}
             </div>
             <div className="px-5 py-4 border-t border-border text-xs text-muted-foreground">
-              Dashboard data is loaded from your `portfolio`, `positions`, and
-              `orders` tables.
+              {performanceView === "copy"
+                ? `Copy view uses follower net PnL after split. Gross copied PnL: ${formatUsd(
+                    selectedPerformance.grossPnl,
+                  )}. Master share: ${formatUsd(
+                    selectedPerformance.masterRewards,
+                  )}. Follower share: ${formatUsd(
+                    selectedPerformance.followerRewards,
+                  )}.`
+                : "Manual view only counts positions opened by this wallet itself."}
             </div>
           </div>
 

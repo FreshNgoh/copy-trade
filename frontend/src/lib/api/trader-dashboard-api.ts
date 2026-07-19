@@ -67,3 +67,59 @@ export async function addTraderDepositApi({
 
   return data;
 }
+
+export async function withdrawTraderBalanceApi({
+  traderWalletAddress,
+  amount,
+}: {
+  traderWalletAddress: string;
+  amount: number;
+}) {
+  const response = await fetch("/api/trader-dashboard", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      trader_wallet_address: traderWalletAddress,
+      amount,
+      action: "withdraw",
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to withdraw wallet balance");
+  }
+
+  return data;
+}
+
+export async function transferCopyWalletToManualApi({
+  traderWalletAddress,
+  amount,
+}: {
+  traderWalletAddress: string;
+  amount: number;
+}) {
+  const response = await fetch("/api/trader-dashboard", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      trader_wallet_address: traderWalletAddress,
+      amount,
+      action: "transfer_copy_to_manual",
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to transfer copy wallet balance");
+  }
+
+  return data;
+}

@@ -1,6 +1,8 @@
 import { positionRepository } from "@/repositories/position-repository";
 import { traderDashboardRepository } from "@/repositories/trader-dashboard-repository";
 import { calculateTradeMetrics } from "@/lib/trading/calculation";
+import { copyMasterPositionToFollowers } from "@/services/copy-trading-service";
+import { closeCopiedTradeOnChain } from "@/lib/web3/copy-trading/server";
 import type {
   ClosePositionDTO,
   CreatePositionDTO,
@@ -25,6 +27,13 @@ const TRADE_HISTORY_DECIMALS = {
   roi: 4,
 } as const;
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const TRADE_SOURCE_OWN = 0;
+const TRADE_SOURCE_COPY = 1;
+const TRADE_SOURCE_COPY_REWARD = 2;
+const MASTER_REWARD_BPS = 7_000;
+const BPS_DENOMINATOR = 10_000;
+
 function getPositionInitialMargin(position) {
   const leverage = toNumber(position.leverage);
   if (leverage <= 0) return 0;
@@ -38,7 +47,10 @@ async function getFreeCollateral(traderWalletAddress: string) {
     positionRepository.getOpenPositions(traderWalletAddress),
   ]);
   const walletBalance = toNumber(portfolio.wallet_balance);
-  const usedMargin = openPositions.reduce(
+  const manualPositions = openPositions.filter(
+    (position) => !isCopiedPosition(position),
+  );
+  const usedMargin = manualPositions.reduce(
     (total, position) => total + getPositionInitialMargin(position),
     0,
   );
@@ -68,25 +80,8 @@ async function syncClosedPositionToChain(
   if (!lockedForSync) return;
 
   try {
-    const result = await storeTradeHistoryRecord({
-      user: position.trader_wallet_address,
-      openTime: toUnixTimestamp(position.created_at),
-      closedTime: toUnixTimestamp(position.updated_at),
-      direction: position.direction === "LONG" ? 0 : 1,
-      quantityDecimals: TRADE_HISTORY_DECIMALS.quantity,
-      priceDecimals: TRADE_HISTORY_DECIMALS.price,
-      pnlDecimals: TRADE_HISTORY_DECIMALS.pnl,
-      roiDecimals: TRADE_HISTORY_DECIMALS.roi,
-      symbol: stringToBytes32(position.symbol),
-      quantity: toScaledInteger(position.quantity, TRADE_HISTORY_DECIMALS.quantity),
-      entryPrice: toScaledInteger(position.entry_price, TRADE_HISTORY_DECIMALS.price),
-      closingPrice: toScaledInteger(
-        position.closing_price,
-        TRADE_HISTORY_DECIMALS.price,
-      ),
-      pnl: toScaledInteger(position.Pnl, TRADE_HISTORY_DECIMALS.pnl),
-      roi: toScaledInteger(position.Roi, TRADE_HISTORY_DECIMALS.roi),
-    });
+    const records = buildTradeHistoryRecords(position);
+    const [result] = await Promise.all(records.map((record) => storeTradeHistoryRecord(record)));
 
     await positionRepository.saveOnChainSyncSuccess({
       positionId: position.position_id,
@@ -110,6 +105,64 @@ async function syncClosedPositionToChain(
       error: errorMessage,
     });
   }
+}
+
+function buildTradeHistoryRecords(position) {
+  const grossPnl = toNumber(position.gross_pnl ?? position.Pnl);
+  const masterReward = toNumber(position.master_reward);
+  const followerReward = toNumber(position.follower_reward);
+  const isCopy = isCopiedPosition(position);
+  const master = isCopy ? position.copied_from_master : ZERO_ADDRESS;
+  const follower = isCopy ? position.trader_wallet_address : ZERO_ADDRESS;
+  const baseRecord = {
+    openTime: toUnixTimestamp(position.created_at),
+    closedTime: toUnixTimestamp(position.updated_at),
+    direction: position.direction === "LONG" ? 0 : 1,
+    quantityDecimals: TRADE_HISTORY_DECIMALS.quantity,
+    priceDecimals: TRADE_HISTORY_DECIMALS.price,
+    pnlDecimals: TRADE_HISTORY_DECIMALS.pnl,
+    roiDecimals: TRADE_HISTORY_DECIMALS.roi,
+    symbol: stringToBytes32(position.symbol),
+    quantity: toScaledInteger(position.quantity, TRADE_HISTORY_DECIMALS.quantity),
+    entryPrice: toScaledInteger(position.entry_price, TRADE_HISTORY_DECIMALS.price),
+    closingPrice: toScaledInteger(position.closing_price, TRADE_HISTORY_DECIMALS.price),
+    roi: toScaledInteger(position.Roi, TRADE_HISTORY_DECIMALS.roi),
+    grossPnl: toScaledInteger(grossPnl, TRADE_HISTORY_DECIMALS.pnl),
+    masterReward: toScaledInteger(masterReward, TRADE_HISTORY_DECIMALS.pnl),
+    followerReward: toScaledInteger(followerReward, TRADE_HISTORY_DECIMALS.pnl),
+  };
+
+  if (!isCopy) {
+    return [
+      {
+        ...baseRecord,
+        user: position.trader_wallet_address,
+        master: ZERO_ADDRESS,
+        follower: ZERO_ADDRESS,
+        source: TRADE_SOURCE_OWN,
+        pnl: toScaledInteger(position.Pnl, TRADE_HISTORY_DECIMALS.pnl),
+      },
+    ];
+  }
+
+  return [
+    {
+      ...baseRecord,
+      user: position.trader_wallet_address,
+      master,
+      follower,
+      source: TRADE_SOURCE_COPY,
+      pnl: toScaledInteger(followerReward, TRADE_HISTORY_DECIMALS.pnl),
+    },
+    {
+      ...baseRecord,
+      user: master,
+      master,
+      follower,
+      source: TRADE_SOURCE_COPY_REWARD,
+      pnl: toScaledInteger(masterReward, TRADE_HISTORY_DECIMALS.pnl),
+    },
+  ];
 }
 
 export async function assertSufficientFreeCollateral(data: CreatePositionDTO) {
@@ -163,6 +216,7 @@ export async function openOrIncreasePosition(data: CreatePositionDTO) {
     });
 
     await syncOpenPositionCount(data.trader_wallet_address);
+    await syncCopiedFollowers(data);
 
     return createdPosition;
   }
@@ -184,12 +238,24 @@ export async function openOrIncreasePosition(data: CreatePositionDTO) {
     direction: data.direction,
   });
 
-  return positionRepository.updatePositionAfterFill({
+  const updatedPosition = await positionRepository.updatePositionAfterFill({
     position_id: existingPosition.position_id,
     quantity: newQty,
     entry_price: averageEntryPrice,
     liquidation_price: updatedMetrics.liquidationPrice,
   });
+
+  await syncCopiedFollowers(data);
+
+  return updatedPosition;
+}
+
+async function syncCopiedFollowers(data: CreatePositionDTO) {
+  try {
+    await copyMasterPositionToFollowers(data);
+  } catch (error) {
+    console.error("Copy trading fan-out failed:", error);
+  }
 }
 
 export async function getOpenPositions(traderWalletAddress: string) {
@@ -199,10 +265,115 @@ export async function getOpenPositions(traderWalletAddress: string) {
 export async function closePosition(position: ClosePositionDTO) {
   const closedPosition = await positionRepository.closePosition(position);
 
+  await settleClosedPositionRewards(closedPosition);
+  await releaseCopiedMargin(closedPosition);
   await syncOpenPositionCount(position.trader_wallet_address);
   await syncClosedPositionToChain(closedPosition);
 
   return closedPosition;
+}
+
+async function settleClosedPositionRewards(position) {
+  const grossPnl = toNumber(position.Pnl);
+  const rewards = getRewardSplit(position, grossPnl);
+  const shouldSettle = await positionRepository.markRewardsSettled({
+    positionId: position.position_id,
+    grossPnl,
+    masterReward: rewards.masterReward,
+    followerReward: rewards.followerReward,
+  });
+
+  if (!shouldSettle) return;
+
+  if (isCopiedPosition(position)) {
+    await applyCopyWalletDelta(
+      position.trader_wallet_address,
+      rewards.followerReward,
+    );
+
+    if (rewards.masterReward > 0 && position.copied_from_master) {
+      await applyWalletDelta(position.copied_from_master, rewards.masterReward);
+    }
+
+    position.gross_pnl = grossPnl;
+    position.master_reward = rewards.masterReward;
+    position.follower_reward = rewards.followerReward;
+    return;
+  }
+
+  await applyWalletDelta(position.trader_wallet_address, grossPnl);
+
+  position.gross_pnl = grossPnl;
+  position.master_reward = 0;
+  position.follower_reward = 0;
+}
+
+async function releaseCopiedMargin(position) {
+  if (!isCopiedPosition(position) || !position.copy_trade_position_id) return;
+
+  try {
+    await closeCopiedTradeOnChain(position.copy_trade_position_id);
+  } catch (error) {
+    console.error("CopyTrading margin release failed:", {
+      positionId: position.position_id,
+      copyTradePositionId: position.copy_trade_position_id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function getRewardSplit(position, grossPnl: number) {
+  if (!isCopiedPosition(position) || grossPnl <= 0) {
+    return {
+      masterReward: 0,
+      followerReward: grossPnl,
+    };
+  }
+
+  const masterReward = (grossPnl * MASTER_REWARD_BPS) / BPS_DENOMINATOR;
+
+  return {
+    masterReward,
+    followerReward: grossPnl - masterReward,
+  };
+}
+
+async function applyWalletDelta(traderWalletAddress: string, amount: number) {
+  if (amount === 0) return;
+
+  if (amount > 0) {
+    await traderDashboardRepository.addWalletBalance({
+      traderWalletAddress,
+      amount,
+    });
+    return;
+  }
+
+  await traderDashboardRepository.subtractWalletBalance({
+    traderWalletAddress,
+    amount: Math.abs(amount),
+  });
+}
+
+async function applyCopyWalletDelta(traderWalletAddress: string, amount: number) {
+  if (amount === 0) return;
+
+  if (amount > 0) {
+    await traderDashboardRepository.addCopyWalletBalance({
+      traderWalletAddress,
+      amount,
+    });
+    return;
+  }
+
+  await traderDashboardRepository.subtractCopyWalletBalance({
+    traderWalletAddress,
+    amount: Math.abs(amount),
+  });
+}
+
+function isCopiedPosition(position) {
+  return position.trade_source === "COPY" || Boolean(position.copied_from_master);
 }
 
 export async function syncClosedPositionById({

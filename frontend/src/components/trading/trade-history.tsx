@@ -3,6 +3,19 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
 import { ClosedPosition } from "@/types/position";
 
+function shortAddress(address?: string | null) {
+  if (!address) return "-";
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function getPositionSourceLabel(position: ClosedPosition) {
+  if (position.trade_source === "COPY" || position.copied_from_master) {
+    return `Copied ${shortAddress(position.copied_from_master)}`;
+  }
+
+  return "Manual";
+}
+
 export function HistoryTable({
   closedPositions,
 }: {
@@ -17,6 +30,7 @@ export function HistoryTable({
           <thead>
             <tr className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground border-b border-border">
               <th className="text-left px-4 py-2">Symbol</th>
+              <th className="text-left px-4 py-2">Source</th>
               <th className="text-left px-4 py-2">Direction</th>
               <th className="text-right px-4 py-2">Quantity</th>
               <th className="text-right px-4 py-2">Entry Price</th>
@@ -35,6 +49,9 @@ export function HistoryTable({
                   className="border-b border-border hover:bg-surface-hover"
                 >
                   <td className="px-4 py-2.5 font-mono text-sm">{p.symbol}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                    {getPositionSourceLabel(p)}
+                  </td>
                   <td className="px-4 py-2.5">
                     <span
                       className={cn(

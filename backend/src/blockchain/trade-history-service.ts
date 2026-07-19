@@ -3,9 +3,12 @@ import { tradeHistoryAbi } from "./trade-history-abi.js";
 
 export type TradeRecordInput = {
   user: string;
+  master: string;
+  follower: string;
   openTime: number;
   closedTime: number;
   direction: number;
+  source: number;
   quantityDecimals: number;
   priceDecimals: number;
   pnlDecimals: number;
@@ -16,6 +19,9 @@ export type TradeRecordInput = {
   closingPrice: bigint;
   pnl: bigint;
   roi: bigint;
+  grossPnl: bigint;
+  masterReward: bigint;
+  followerReward: bigint;
 };
 
 export type StoredTradeResult = {

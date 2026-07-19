@@ -51,12 +51,17 @@ export const TRADE_HISTORY_DECIMALS = {
   roi: 4
 } as const;
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 export function buildTradeRecordFromClosedOrder(order: ClosedOrder): TradeRecordInput {
   return {
     user: getAddress(order.userWallet),
+    master: ZERO_ADDRESS,
+    follower: ZERO_ADDRESS,
     openTime: toUnixTimestamp(order.openTime),
     closedTime: toUnixTimestamp(order.closedTime),
     direction: parseDirection(order.direction),
+    source: 0,
     quantityDecimals: TRADE_HISTORY_DECIMALS.quantity,
     priceDecimals: TRADE_HISTORY_DECIMALS.price,
     pnlDecimals: TRADE_HISTORY_DECIMALS.pnl,
@@ -66,7 +71,10 @@ export function buildTradeRecordFromClosedOrder(order: ClosedOrder): TradeRecord
     entryPrice: parseScaledInteger(order.entryPrice, TRADE_HISTORY_DECIMALS.price),
     closingPrice: parseScaledInteger(order.closingPrice, TRADE_HISTORY_DECIMALS.price),
     pnl: parseScaledInteger(order.pnl, TRADE_HISTORY_DECIMALS.pnl),
-    roi: parseScaledInteger(order.roi, TRADE_HISTORY_DECIMALS.roi)
+    roi: parseScaledInteger(order.roi, TRADE_HISTORY_DECIMALS.roi),
+    grossPnl: parseScaledInteger(order.pnl, TRADE_HISTORY_DECIMALS.pnl),
+    masterReward: 0n,
+    followerReward: 0n
   };
 }
 
