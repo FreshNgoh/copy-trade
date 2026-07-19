@@ -1,10 +1,9 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
-import jazzicon from "@metamask/jazzicon";
 import { ExternalLink, TrendingUp, Users } from "lucide-react";
 import type { VerifiedMasterTrader } from "@/types/verified-master";
+import { WalletAvatar } from "@/components/wallet/wallet-avatar";
 
 function formatUsd(value: number) {
   return `$${value.toLocaleString(undefined, {
@@ -28,8 +27,11 @@ export function VerifiedMasterCard({
     >
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
-            <div className="flex items-center gap-2">
-            <WalletAvatar address={trader.traderWalletAddress} />
+          <div className="flex items-center gap-2">
+            <WalletAvatar
+              address={trader.traderWalletAddress}
+              className="flex-shrink-0 overflow-hidden border border-border bg-background"
+            />
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">
                 {trader.displayName}
@@ -99,27 +101,4 @@ export function VerifiedMasterCard({
       </div>
     </Link>
   );
-}
-
-function WalletAvatar({ address }: { address: string }) {
-  const avatarRef = React.useRef<HTMLDivElement | null>(null);
-
-  React.useEffect(() => {
-    const container = avatarRef.current;
-    if (!container) return;
-
-    container.replaceChildren(jazzicon(40, getJazziconSeed(address)));
-  }, [address]);
-
-  return (
-    <div
-      ref={avatarRef}
-      className="h-10 w-10 flex-shrink-0 overflow-hidden border border-border bg-background"
-      aria-label={`Wallet avatar for ${address}`}
-    />
-  );
-}
-
-function getJazziconSeed(address: string) {
-  return parseInt(address.slice(2, 10), 16);
 }
