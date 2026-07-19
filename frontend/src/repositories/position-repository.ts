@@ -170,13 +170,27 @@ export class PositionRepository {
       .from("positions")
       .select("*")
       .order("created_at", { ascending: false })
-      .eq("trader_wallet_address", traderWalletAddress)
+      .ilike("trader_wallet_address", traderWalletAddress)
       .eq("status", "CLOSED");
 
     if (error) {
       throw error;
     }
     return positions;
+  }
+
+  async getClosedPositionsForTrader(traderWalletAddress: string) {
+    const { data: positions, error } = await supabase
+      .from("positions")
+      .select("position_id,quantity,entry_price,Roi,status")
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .eq("status", "CLOSED");
+
+    if (error) {
+      throw error;
+    }
+
+    return positions ?? [];
   }
 
   async getClosedPositionById({

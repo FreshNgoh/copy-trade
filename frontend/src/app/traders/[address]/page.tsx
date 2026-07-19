@@ -1,77 +1,166 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import { useParams } from 'next/navigation';
-import Image from 'next/image';
-import { TRADERS } from '@/lib/mock-data';
-import { cn } from '@/lib/utils';
-import { Shield, Users, TrendingUp, Activity, Copy, ExternalLink, Twitter } from 'lucide-react';
-import { CopySettingsModal } from '@/components/trader/copy-settings-modal';
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, Area } from 'recharts';
-import { toast } from 'sonner';
+import * as React from "react";
+import { useParams } from "next/navigation";
+import { cn } from "@/lib/utils";
+import {
+  Shield,
+  Activity,
+  Copy,
+  ExternalLink,
+  Twitter,
+  Loader2,
+  RefreshCcw,
+} from "lucide-react";
+import { CopySettingsModal } from "@/components/trader/copy-settings-modal";
+import { WalletAvatar } from "@/components/wallet/wallet-avatar";
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { toast } from "sonner";
+import {
+  formatMasterRoi,
+  formatMasterTradingVolume,
+  formatPercent,
+  formatUnsignedPercent,
+  formatUsd,
+  useOnChainTraderProfile,
+} from "@/hooks/use-onchain-trader-profile";
+import {
+  formatPnl,
+  formatPrice,
+  formatQuantity,
+  formatRoi,
+  formatTimestamp,
+} from "@/lib/web3/trade-history/format";
+
+const notAvailable = "N/A";
 
 export default function TraderProfilePage() {
-  const params = useParams();
-  const address = params.address as string;
-  const trader = TRADERS.find((t) => t.address.toLowerCase() === address?.toLowerCase()) || TRADERS[0];
+  const params = useParams<{ address?: string | string[] }>();
+  const address = Array.isArray(params.address) ? params.address[0] : params.address;
   const [copyOpen, setCopyOpen] = React.useState(false);
+  const {
+    profile,
+    isLoading,
+    error,
+    invalidAddress,
+    missingMasterRegistryAddress,
+  } = useOnChainTraderProfile(address);
 
-  const positive = trader.roi30d >= 0;
+  const traderAddress = profile?.address ?? (!invalidAddress ? (address as `0x${string}` | undefined) : undefined);
+  const displayName = traderAddress ? shortAddress(traderAddress) : notAvailable;
+  const verified = profile?.verified === true;
+  const totalPnlPositive = profile?.totalPnl === null || profile?.totalPnl === undefined || profile.totalPnl >= 0;
+  const verificationRoi = profile?.verificationRoi ?? null;
+  const verificationVolume = profile?.verificationTradingVolume ?? null;
+  const displayedRoi = verificationRoi !== null ? formatMasterRoi(verificationRoi) : formatPercent(profile?.averageRoi ?? null);
+  const displayedVolume = verificationVolume !== null
+    ? formatMasterTradingVolume(verificationVolume)
+    : formatUsd(profile?.tradingVolume ?? null);
+
+  const stats = [
+    { l: "30D ROI", v: notAvailable },
+    {
+      l: "All-Time ROI",
+      v: displayedRoi,
+      c: getSignedClass(displayedRoi),
+    },
+    { l: "Win Rate", v: formatUnsignedPercent(profile?.winRate ?? null) },
+    { l: "AUM", v: notAvailable },
+    { l: "Followers", v: notAvailable },
+    { l: "Total Trades", v: profile ? profile.totalTrades.toLocaleString() : notAvailable },
+    { l: "Max Drawdown", v: notAvailable },
+    { l: "Risk Score", v: notAvailable },
+    {
+      l: "Total PnL",
+      v: formatUsd(profile?.totalPnl ?? null),
+      c: profile?.totalPnl === null || profile?.totalPnl === undefined
+        ? undefined
+        : profile.totalPnl >= 0
+          ? "text-success"
+          : "text-danger",
+    },
+    { l: "Avg Hold", v: notAvailable },
+    { l: "Trading Volume", v: displayedVolume },
+    {
+      l: "Verified At",
+      v: profile?.verifiedAt ? formatTimestamp(profile.verifiedAt) : notAvailable,
+    },
+  ];
 
   return (
     <div data-testid="trader-profile-page" className="bg-background min-h-screen">
       <div className="max-w-[1600px] mx-auto px-6 py-8">
-        {/* Header */}
         <div className="bg-surface border border-border p-6 mb-6">
           <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
             <div className="flex items-center gap-5">
-              <div className="relative w-20 h-20 overflow-hidden border border-border">
-                <Image src={trader.avatar} alt="" fill sizes="80px" className="object-cover" />
-              </div>
+              <WalletAvatar
+                address={traderAddress ?? "0x0000000000000000000000000000000000000000"}
+                size={80}
+                className="relative flex-shrink-0 overflow-hidden border border-border bg-background"
+              />
               <div>
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
                   <h1
                     className="font-heading text-3xl lg:text-4xl font-bold tracking-tighter"
-                    style={{ fontFamily: 'var(--font-unbounded)' }}
+                    style={{ fontFamily: "var(--font-unbounded)" }}
                   >
-                    {trader.ens}
+                    {displayName}
                   </h1>
-                  {trader.verified && (
+                  {verified && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider border border-accent text-accent bg-accent/10 px-2 py-1">
                       <Shield className="w-3 h-3" fill="#00E5FF" stroke="#000" />
                       Verified
                     </span>
                   )}
                   <span className="text-[10px] font-mono uppercase tracking-wider border border-border px-2 py-1 text-muted-foreground">
-                    {trader.style}
+                    On-Chain Profile
                   </span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText(trader.address);
-                    toast.success('Address copied');
+                    if (!traderAddress) return;
+                    navigator.clipboard.writeText(traderAddress);
+                    toast.success("Address copied");
                   }}
-                  className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-white"
+                  disabled={!traderAddress}
+                  className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {trader.address.slice(0, 8)}…{trader.address.slice(-6)}
+                  {traderAddress ? `${traderAddress.slice(0, 8)}...${traderAddress.slice(-6)}` : notAvailable}
                   <Copy className="w-3 h-3" />
                 </button>
-                <p className="text-sm text-muted-foreground mt-3 max-w-2xl leading-relaxed">{trader.bio}</p>
-                <div className="flex gap-3 mt-3">
+                <p className="text-sm text-muted-foreground mt-3 max-w-2xl leading-relaxed">
+                  On-chain verified master trader profile. Fields not stored in the smart contracts are shown as {notAvailable}.
+                </p>
+                <div className="flex flex-wrap gap-3 mt-3">
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Twitter className="w-3 h-3" />@{trader.ens.split('.')[0]}
+                    <Twitter className="w-3 h-3" />
+                    {notAvailable}
                   </span>
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <ExternalLink className="w-3 h-3" />
-                    Etherscan
-                  </span>
+                  {traderAddress ? (
+                    <a
+                      href={`https://sepolia.etherscan.io/address/${traderAddress}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-accent"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Etherscan
+                    </a>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <ExternalLink className="w-3 h-3" />
+                      {notAvailable}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
             <button
               data-testid="copy-trader-cta"
               onClick={() => setCopyOpen(true)}
-              className="w-full lg:w-auto bg-accent text-accent-foreground px-8 py-4 font-medium hover:brightness-110 transition-all flex items-center justify-center gap-2"
+              disabled={!traderAddress || invalidAddress}
+              className="w-full lg:w-auto bg-accent text-accent-foreground px-8 py-4 font-medium hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Activity className="w-4 h-4" />
               Copy Trader
@@ -79,131 +168,145 @@ export default function TraderProfilePage() {
           </div>
         </div>
 
-        {/* Stats row */}
+        {isLoading && (
+          <div className="mb-6 flex items-center gap-2 border border-border bg-surface px-4 py-4 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading on-chain trader data from Sepolia
+          </div>
+        )}
+
+        {missingMasterRegistryAddress && (
+          <div className="mb-6 border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-warning">
+            Missing NEXT_PUBLIC_MASTER_REGISTRY_CONTRACT_ADDRESS. Verification fields will show {notAvailable}.
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-6 border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-danger">
+            {error}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-px bg-border mb-6">
-          {[
-            { l: '30D ROI', v: `${positive ? '+' : ''}${trader.roi30d}%`, c: positive ? 'text-success' : 'text-danger' },
-            { l: 'All-Time ROI', v: `+${trader.roiAll}%`, c: 'text-success' },
-            { l: 'Win Rate', v: `${trader.winRate}%` },
-            { l: 'AUM', v: `$${(trader.aum / 1e6).toFixed(2)}M` },
-            { l: 'Followers', v: trader.followers.toLocaleString() },
-            { l: 'Total Trades', v: trader.totalTrades.toLocaleString() },
-            { l: 'Max Drawdown', v: `-${trader.maxDrawdown}%`, c: 'text-danger' },
-            { l: 'Risk Score', v: `${trader.riskScore}/10`, c: trader.riskScore <= 3 ? 'text-success' : trader.riskScore <= 6 ? 'text-warning' : 'text-danger' },
-            { l: 'Total PnL', v: `+$${trader.totalPnl.toLocaleString()}`, c: 'text-success' },
-            { l: 'Avg Hold', v: '14h' },
-            { l: 'Sharpe', v: '2.41' },
-            { l: 'Active Since', v: '2022' },
-          ].map((s, i) => (
-            <div key={i} className="bg-surface p-4">
+          {stats.map((s) => (
+            <div key={s.l} className="bg-surface p-4">
               <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">{s.l}</div>
-              <div className={cn('font-mono text-base', s.c)}>{s.v}</div>
+              <div className={cn("font-mono text-base", s.c)}>{s.v}</div>
             </div>
           ))}
         </div>
 
-        {/* Chart + Trades */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-surface border border-border">
             <div className="px-5 py-3 border-b border-border flex items-center justify-between">
               <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                ▎ Cumulative PnL · 90D
+                Cumulative PnL
               </span>
-              <span className={cn('font-mono text-lg', positive ? 'text-success' : 'text-danger')}>
-                {positive ? '+' : ''}${trader.totalPnl.toLocaleString()}
+              <span className={cn("font-mono text-lg", totalPnlPositive ? "text-success" : "text-danger")}>
+                {formatUsd(profile?.totalPnl ?? null)}
               </span>
             </div>
             <div className="p-4" style={{ height: 360 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trader.perfSeries}>
-                  <defs>
-                    <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#00E5FF" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="#00E5FF" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis
-                    dataKey="t"
-                    stroke="#52525B"
-                    fontSize={10}
-                    tick={{ fill: '#A1A1AA', fontFamily: 'JetBrains Mono' }}
-                    tickFormatter={(t) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                  />
-                  <YAxis
-                    stroke="#52525B"
-                    fontSize={10}
-                    tick={{ fill: '#A1A1AA', fontFamily: 'JetBrains Mono' }}
-                    tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: '#0F0F11',
-                      border: '1px solid #27272A',
-                      borderRadius: 0,
-                      fontFamily: 'JetBrains Mono',
-                      fontSize: 11,
-                    }}
-                    labelFormatter={(t) => new Date(t).toLocaleDateString()}
-                    formatter={(v: number) => [`$${v.toLocaleString()}`, 'PnL']}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="pnl"
-                    stroke="#00E5FF"
-                    strokeWidth={2}
-                    fill="url(#pnlGrad)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {profile && profile.cumulativePnlSeries.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={profile.cumulativePnlSeries}>
+                    <defs>
+                      <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#00E5FF" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#00E5FF" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis
+                      dataKey="t"
+                      stroke="#52525B"
+                      fontSize={10}
+                      tick={{ fill: "#A1A1AA", fontFamily: "JetBrains Mono" }}
+                      tickFormatter={(t) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    />
+                    <YAxis
+                      stroke="#52525B"
+                      fontSize={10}
+                      tick={{ fill: "#A1A1AA", fontFamily: "JetBrains Mono" }}
+                      tickFormatter={(v) => `$${Number(v).toLocaleString()}`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "#0F0F11",
+                        border: "1px solid #27272A",
+                        borderRadius: 0,
+                        fontFamily: "JetBrains Mono",
+                        fontSize: 11,
+                      }}
+                      labelFormatter={(t) => new Date(Number(t)).toLocaleDateString()}
+                      formatter={(v: number) => [formatUsd(v), "PnL"]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="pnl"
+                      stroke="#00E5FF"
+                      strokeWidth={2}
+                      fill="url(#pnlGrad)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center font-mono text-sm text-muted-foreground">
+                  {isLoading ? "Loading..." : notAvailable}
+                </div>
+              )}
             </div>
           </div>
 
           <div className="bg-surface border border-border">
             <div className="px-5 py-3 border-b border-border">
               <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                ▎ Recent Activity
+                Recent Activity
               </span>
             </div>
             <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
-              {trader.recentTrades.slice(0, 8).map((tr) => (
-                <div key={tr.id} className="p-3 hover:bg-surface-hover">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs">{tr.pair}</span>
-                      <span
-                        className={cn(
-                          'text-[9px] font-mono uppercase px-1 py-0.5 border',
-                          tr.side === 'LONG' ? 'border-success text-success' : 'border-danger text-danger'
-                        )}
-                      >
-                        {tr.side} {tr.leverage}×
+              {profile && profile.trades.length > 0 ? (
+                profile.trades.slice(0, 8).map((trade) => (
+                  <div key={trade.tradeId.toString()} className="p-3 hover:bg-surface-hover">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs">{trade.symbol || notAvailable}</span>
+                        <span
+                          className={cn(
+                            "text-[9px] font-mono uppercase px-1 py-0.5 border",
+                            trade.side === "LONG" ? "border-success text-success" : "border-danger text-danger"
+                          )}
+                        >
+                          {trade.side}
+                        </span>
+                      </div>
+                      <span className={cn("font-mono text-xs", trade.pnl >= 0n ? "text-success" : "text-danger")}>
+                        {formatPnl(trade.pnl, trade.pnlDecimals)}
                       </span>
                     </div>
-                    <span
-                      className={cn('font-mono text-xs', tr.pnl >= 0 ? 'text-success' : 'text-danger')}
-                    >
-                      {tr.pnl >= 0 ? '+' : ''}${tr.pnl.toFixed(2)}
-                    </span>
+                    <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+                      <span>{formatTimestamp(trade.closedTime)}</span>
+                      <span className="text-accent">ID {trade.tradeId.toString()}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
-                    <span>{new Date(tr.timestamp).toLocaleString()}</span>
-                    <span className="text-accent truncate max-w-[120px]">{tr.txHash.slice(0, 10)}…</span>
-                  </div>
+                ))
+              ) : (
+                <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+                  <RefreshCcw className="h-4 w-4" />
+                  {isLoading ? "Loading trades..." : "No on-chain trades found."}
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
 
-        {/* Trade history table */}
         <div className="bg-surface border border-border mt-6">
           <div className="px-5 py-3 border-b border-border">
             <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-              ▎ Trade History (Reconstructed from on-chain events)
+              Trade History
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[1040px]">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground border-b border-border">
                   <th className="text-left px-4 py-2.5">Time</th>
@@ -213,44 +316,82 @@ export default function TraderProfilePage() {
                   <th className="text-right px-4 py-2.5">Exit</th>
                   <th className="text-right px-4 py-2.5">Size</th>
                   <th className="text-right px-4 py-2.5">PnL</th>
+                  <th className="text-right px-4 py-2.5">ROI</th>
                   <th className="text-right px-4 py-2.5">Tx</th>
                 </tr>
               </thead>
               <tbody>
-                {trader.recentTrades.map((tr) => (
-                  <tr key={tr.id} className="border-b border-border hover:bg-surface-hover">
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                      {new Date(tr.timestamp).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-sm">{tr.pair}</td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className={cn(
-                          'text-[10px] font-mono uppercase px-1.5 py-0.5 border',
-                          tr.side === 'LONG' ? 'border-success text-success' : 'border-danger text-danger'
-                        )}
-                      >
-                        {tr.side} {tr.leverage}×
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm text-muted-foreground">${tr.entry}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm">${tr.exit?.toFixed(2)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm">${tr.size.toLocaleString()}</td>
-                    <td className={cn('px-4 py-2.5 text-right font-mono text-sm', tr.pnl >= 0 ? 'text-success' : 'text-danger')}>
-                      {tr.pnl >= 0 ? '+' : ''}${tr.pnl.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-xs text-accent truncate max-w-[120px]">
-                      {tr.txHash.slice(0, 10)}…
+                {profile && profile.trades.length > 0 ? (
+                  profile.trades.map((trade) => (
+                    <tr key={trade.tradeId.toString()} className="border-b border-border hover:bg-surface-hover">
+                      <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                        {formatTimestamp(trade.closedTime)}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-sm">{trade.symbol || notAvailable}</td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={cn(
+                            "text-[10px] font-mono uppercase px-1.5 py-0.5 border",
+                            trade.side === "LONG" ? "border-success text-success" : "border-danger text-danger"
+                          )}
+                        >
+                          {trade.side}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-sm text-muted-foreground">
+                        {formatPrice(trade.entryPrice, trade.priceDecimals)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-sm">
+                        {formatPrice(trade.closingPrice, trade.priceDecimals)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-sm">
+                        {formatQuantity(trade.quantity, trade.quantityDecimals, trade.symbol)}
+                      </td>
+                      <td className={cn("px-4 py-2.5 text-right font-mono text-sm", trade.pnl >= 0n ? "text-success" : "text-danger")}>
+                        {formatPnl(trade.pnl, trade.pnlDecimals)}
+                      </td>
+                      <td className={cn("px-4 py-2.5 text-right font-mono text-sm", trade.roi >= 0n ? "text-success" : "text-danger")}>
+                        {formatRoi(trade.roi, trade.roiDecimals)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
+                        {notAvailable}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-8 text-center font-mono text-sm text-muted-foreground">
+                      {isLoading ? "Loading on-chain trade history..." : "No on-chain trade history found."}
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
 
-      <CopySettingsModal open={copyOpen} onOpenChange={setCopyOpen} trader={trader} />
+      {traderAddress && (
+        <CopySettingsModal
+          open={copyOpen}
+          onOpenChange={setCopyOpen}
+          trader={{
+            address: traderAddress,
+            ens: displayName,
+            avatar: null,
+            verified,
+          }}
+        />
+      )}
     </div>
   );
+}
+
+function shortAddress(address: string) {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function getSignedClass(value: string) {
+  if (value === notAvailable) return undefined;
+  return value.startsWith("-") ? "text-danger" : "text-success";
 }

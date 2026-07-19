@@ -9,14 +9,21 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import type { Trader } from '@/lib/mock-data';
 import { Shield, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
 import { wagmiConfig } from '@/lib/wagmi';
 import { CONTRACTS } from '@/lib/web3/constants/contracts';
 import copyTrading from '@/lib/web3/abi/copy-trading-abi.json';
+import { WalletAvatar } from '@/components/wallet/wallet-avatar';
 
 const copyTradingAbi = copyTrading.abi as Abi;
+
+type CopyTrader = {
+  address: `0x${string}`;
+  ens: string;
+  avatar?: string | null;
+  verified: boolean;
+};
 
 export function CopySettingsModal({
   open,
@@ -25,7 +32,7 @@ export function CopySettingsModal({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  trader: Trader;
+  trader: CopyTrader;
 }) {
   const [investment, setInvestment] = React.useState(1000);
   const [allocation, setAllocation] = React.useState([10]);
@@ -98,7 +105,14 @@ export function CopySettingsModal({
           <DialogHeader className="space-y-3">
             <div className="flex items-center gap-3">
               <div className="relative w-10 h-10 overflow-hidden border border-border">
-                <Image src={trader.avatar} alt={trader.ens} fill sizes="40px" className="object-cover" />
+                {trader.avatar ? (
+                  <Image src={trader.avatar} alt={trader.ens} fill sizes="40px" className="object-cover" />
+                ) : (
+                  <WalletAvatar
+                    address={trader.address}
+                    className="overflow-hidden bg-background"
+                  />
+                )}
               </div>
               <div>
                 <DialogTitle className="font-heading text-base flex items-center gap-1.5">

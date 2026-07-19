@@ -6,7 +6,7 @@ export class TraderDashboardRepository {
     const { data: portfolio, error } = await supabase
       .from("portfolio")
       .select("*")
-      .eq("trader_wallet_address", traderWalletAddress)
+      .ilike("trader_wallet_address", traderWalletAddress)
       .maybeSingle();
 
     if (error) {
@@ -57,7 +57,7 @@ export class TraderDashboardRepository {
       .update({
         wallet_balance: nextBalance,
       })
-      .eq("trader_wallet_address", traderWalletAddress)
+      .ilike("trader_wallet_address", traderWalletAddress)
       .select()
       .single();
 
@@ -82,7 +82,7 @@ export class TraderDashboardRepository {
       .update({
         positions,
       })
-      .eq("trader_wallet_address", traderWalletAddress)
+      .ilike("trader_wallet_address", traderWalletAddress)
       .select()
       .single();
 
@@ -98,7 +98,7 @@ export class TraderDashboardRepository {
       .from("positions")
       .select("*")
       .order("created_at", { ascending: false })
-      .eq("trader_wallet_address", traderWalletAddress);
+      .ilike("trader_wallet_address", traderWalletAddress);
 
     if (error) {
       throw error;
@@ -112,7 +112,7 @@ export class TraderDashboardRepository {
       .from("orders")
       .select("*")
       .order("created_at", { ascending: false })
-      .eq("trader_wallet_address", traderWalletAddress)
+      .ilike("trader_wallet_address", traderWalletAddress)
       .in("status", ["PENDING", "PARTIALLY_FILLED"]);
 
     if (error) {
@@ -120,6 +120,107 @@ export class TraderDashboardRepository {
     }
 
     return orders ?? [];
+  }
+
+  async getVerifiedMasterTraders() {
+    const { data: portfolios, error } = await supabase
+      .from("portfolio")
+      .select(
+        "trader_id,trader_wallet_address,wallet_balance,followers,is_verified_master,master_verified_at,master_verification_tx_hash,master_total_trades,master_roi,master_trading_volume",
+      )
+      .eq("is_verified_master", true)
+      .order("master_roi", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return portfolios ?? [];
+  }
+
+  async markMasterVerificationPending(traderWalletAddress: string) {
+    await this.ensurePortfolio(traderWalletAddress);
+
+    const { data: portfolio, error } = await supabase
+      .from("portfolio")
+      .update({
+        master_status: "PENDING",
+        master_verification_error: null,
+      })
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .eq("is_verified_master", false)
+      .neq("master_status", "PENDING")
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return portfolio;
+  }
+
+  async saveMasterVerificationSuccess({
+    traderWalletAddress,
+    txHash,
+    blockNumber,
+    totalTrades,
+    roi,
+    tradingVolume,
+  }: {
+    traderWalletAddress: string;
+    txHash: string;
+    blockNumber: number | null;
+    totalTrades: number;
+    roi: number;
+    tradingVolume: number;
+  }) {
+    const { data: portfolio, error } = await supabase
+      .from("portfolio")
+      .update({
+        master_status: "VERIFIED",
+        is_verified_master: true,
+        master_verified_at: new Date().toISOString(),
+        master_verification_tx_hash: txHash,
+        master_verification_block: blockNumber,
+        master_verification_error: null,
+        master_total_trades: totalTrades,
+        master_roi: roi,
+        master_trading_volume: tradingVolume,
+      })
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return portfolio;
+  }
+
+  async saveMasterVerificationFailure({
+    traderWalletAddress,
+    errorMessage,
+  }: {
+    traderWalletAddress: string;
+    errorMessage: string;
+  }) {
+    const { data: portfolio, error } = await supabase
+      .from("portfolio")
+      .update({
+        master_status: "FAILED",
+        master_verification_error: errorMessage,
+      })
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return portfolio;
   }
 }
 
