@@ -8,7 +8,8 @@ import { useAccount } from "wagmi";
 import { createPositionApi } from "@/lib/api/position-api";
 import { createOrderApi } from "@/lib/api/order-api";
 import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
-import { calculateTradeMetrics } from "@/lib/trading/calculation";
+import { calculateTradeMetrics, calculateWalletLiquidationPrices } from "@/lib/trading/calculation";
+import type { TraderDashboardPosition } from "@/types/trader-dashboard";
 
 export function TradePanel({
   pair,
@@ -31,6 +32,8 @@ export function TradePanel({
   const [stopLoss, setStopLoss] = React.useState("");
   const [takeProfit, setTakeProfit] = React.useState("");
   const [freeCollateral, setFreeCollateral] = React.useState(0);
+  const [manualWalletBalance, setManualWalletBalance] = React.useState(0);
+  const [openPositions, setOpenPositions] = React.useState<TraderDashboardPosition[]>([]);
   const orderPrice = type === "MARKET" ? midPrice : Number(price);
   const marginAmount = Number(margin);
   const orderQuantity =
@@ -45,6 +48,35 @@ export function TradePanel({
     margin: marginAmount,
     direction: direction === "BUY" ? "LONG" : "SHORT",
   });
+  const estimatedLiquidationPrice = React.useMemo(() => {
+    if (!pair || orderQuantity <= 0 || orderPrice <= 0) return 0;
+    const positionDirection: "LONG" | "SHORT" = direction === "BUY" ? "LONG" : "SHORT";
+    const manualPositions = openPositions.filter(
+      (position) => position.trade_source !== "COPY" && !position.copied_from_master,
+    );
+    const matching = manualPositions.find(
+      (position) => position.symbol === pair && position.direction === positionDirection,
+    );
+    const previewId = matching?.position_id ?? "preview-position";
+    const previewPositions = matching
+      ? manualPositions.map((position) => {
+          if (position.position_id !== matching.position_id) return position;
+          const oldQuantity = Number(position.quantity);
+          const nextQuantity = oldQuantity + orderQuantity;
+          return {
+            ...position,
+            quantity: nextQuantity,
+            entry_price:
+              (oldQuantity * Number(position.entry_price) + orderQuantity * orderPrice) /
+              nextQuantity,
+          };
+        })
+      : [...manualPositions, { position_id: previewId, trader_wallet_address: address ?? "", symbol: pair, quantity: orderQuantity, direction: positionDirection, entry_price: orderPrice, leverage: leverage[0], stop_loss: null, take_profit: null, status: "OPEN" as const, created_at: "", updated_at: "", trade_source: "OWN" as const }];
+    return calculateWalletLiquidationPrices(previewPositions, {
+      manual: manualWalletBalance,
+      copy: 0,
+    }).find((position) => position.position_id === previewId)?.liquidation_price ?? 0;
+  }, [address, direction, leverage, manualWalletBalance, openPositions, orderPrice, orderQuantity, pair]);
   const isOverFreeCollateral =
     marginAmount > 0 && marginAmount > freeCollateral;
   const canSubmit =
@@ -64,9 +96,13 @@ export function TradePanel({
     try {
       const dashboard = await getTraderDashboardApi(address);
       setFreeCollateral(Number(dashboard.stats.freeCollateral || 0));
+      setManualWalletBalance(Number(dashboard.stats.walletBalance || 0));
+      setOpenPositions(dashboard.activePositions);
     } catch (error) {
       console.error("Failed to fetch free collateral:", error);
       setFreeCollateral(0);
+      setManualWalletBalance(0);
+      setOpenPositions([]);
     }
   }, [address]);
 
@@ -410,8 +446,8 @@ export function TradePanel({
               Estimate Liq. Price
             </span>
             <span className="font-mono">
-              {metrics.liquidationPrice > 0
-                ? `$${metrics.liquidationPrice.toFixed(2)}`
+              {estimatedLiquidationPrice > 0
+                ? `$${estimatedLiquidationPrice.toFixed(2)}`
                 : "-"}
             </span>
           </div>

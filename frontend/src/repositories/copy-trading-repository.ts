@@ -44,15 +44,14 @@ export class CopyTradingRepository {
     }
 
     if (allocationDelta > 0) {
-      await traderDashboardRepository.moveWalletToCopyWallet({
-        traderWalletAddress: input.followerWalletAddress,
-        amount: allocationDelta,
-      });
-    } else if (allocationDelta < 0) {
-      await traderDashboardRepository.moveCopyWalletToWallet({
-        traderWalletAddress: input.followerWalletAddress,
-        amount: Math.abs(allocationDelta),
-      });
+      const portfolio = await traderDashboardRepository.ensurePortfolio(
+        input.followerWalletAddress,
+      );
+      if (input.maxCopyAmount > Number(portfolio.copy_wallet_balance || 0)) {
+        throw new Error(
+          "Copy allocation exceeds your Copy Wallet balance. Transfer funds to Copy Wallet first.",
+        );
+      }
     }
 
     const { data, error } = await supabase
@@ -130,27 +129,6 @@ export class CopyTradingRepository {
       .maybeSingle();
 
     if (error) throw error;
-
-    if (existingSettings?.enabled) {
-      const activeCopiedMargin = await positionRepository.getOpenCopiedMargin({
-        followerWalletAddress,
-        masterWalletAddress,
-      });
-      const releasableAmount = Math.max(
-        Number(existingSettings.max_copy_amount || 0) - activeCopiedMargin,
-        0,
-      );
-
-      if (releasableAmount <= 0) {
-        await this.syncMasterFollowerCount(masterWalletAddress);
-        return data;
-      }
-
-      await traderDashboardRepository.moveCopyWalletToWallet({
-        traderWalletAddress: followerWalletAddress,
-        amount: releasableAmount,
-      });
-    }
 
     await this.syncMasterFollowerCount(masterWalletAddress);
 

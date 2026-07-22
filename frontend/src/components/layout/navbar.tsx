@@ -5,6 +5,12 @@ import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { cn } from "@/lib/utils";
 import { Activity, Bell, Search } from "lucide-react";
+import * as React from "react";
+import {
+  getNotifications,
+  NOTIFICATIONS_UPDATED_EVENT,
+  type AppNotification,
+} from "@/lib/notifications";
 
 const NAV = [
   { href: "/", label: "Home" },
@@ -17,6 +23,22 @@ const NAV = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const [notifications, setNotifications] = React.useState<AppNotification[]>(
+    [],
+  );
+
+  React.useEffect(() => {
+    const refresh = () => setNotifications(getNotifications());
+    refresh();
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  const unread = notifications.filter((item) => !item.read).length;
 
   return (
     <nav
@@ -71,7 +93,7 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
+          {/* <button
             data-testid="nav-search-button"
             className="hidden md:flex items-center gap-2 px-3 py-1.5 border border-border hover:border-border-focus transition-colors text-xs text-muted-foreground"
           >
@@ -80,14 +102,20 @@ export function Navbar() {
             <span className="font-mono text-[10px] border border-border px-1 ml-2">
               ⌘K
             </span>
-          </button>
-          <button
+          </button> */}
+          <Link
+            href="/notifications"
             data-testid="nav-notifications"
+            aria-label="Notifications"
             className="w-9 h-9 border border-border hover:border-border-focus transition-colors flex items-center justify-center relative"
           >
             <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-accent rounded-full" />
-          </button>
+            {unread > 0 && (
+              <span className="absolute top-1 right-1 min-w-3.5 h-3.5 px-0.5 bg-accent text-black text-[8px] font-mono rounded-full flex items-center justify-center">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
+          </Link>
           <div data-testid="connect-wallet-container">
             <ConnectButton
               showBalance={false}

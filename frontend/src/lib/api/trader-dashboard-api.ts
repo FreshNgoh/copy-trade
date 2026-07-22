@@ -123,3 +123,26 @@ export async function transferCopyWalletToManualApi({
 
   return data;
 }
+
+export async function transferManualWalletToCopyApi({
+  traderWalletAddress,
+  amount,
+}: {
+  traderWalletAddress: string;
+  amount: number;
+}) {
+  const response = await fetch("/api/trader-dashboard", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      trader_wallet_address: traderWalletAddress,
+      amount,
+      action: "transfer_manual_to_copy",
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to transfer manual wallet balance");
+  }
+  return data;
+}

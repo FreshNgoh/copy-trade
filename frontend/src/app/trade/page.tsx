@@ -5,6 +5,7 @@ import { CandlestickChart } from "@/components/trading/candlestick-chart";
 import { OrderBook } from "@/components/trading/order-book";
 import { TradePanel } from "@/components/trading/trade-panel";
 import { getClosedPositionsApi, getPositionsApi } from "@/lib/api/position-api";
+import { closePositionApi } from "@/lib/api/position-api";
 import { cn } from "@/lib/utils";
 import { BINANCE_TESTNET_BASE, SYMBOL_MAP } from "@/lib/trading/binance";
 import { PositionsTable } from "@/components/trading/position-table";
@@ -14,6 +15,8 @@ import { getLimitOrdersApi } from "@/lib/api/order-api";
 import { PairSelector } from "@/components/trading/pair-selector";
 import { useBinancePrice } from "@/hooks/use-binance-price";
 import { useAccount } from "wagmi";
+import { addNotification } from "@/lib/notifications";
+import { toast } from "sonner";
 
 const INITIAL_PAIRS = [
   { pair: "ETH/USDC", price: 0, change: 0, vol: "$0" },
@@ -61,6 +64,8 @@ export default function TradePage() {
   const [activePositions, setActivePositions] = React.useState([]);
   const [closedPositions, setClosedPositions] = React.useState([]);
   const [orderPositions, setOrderPositions] = React.useState([]);
+  const liquidationWarningsRef = React.useRef(new Set<string>());
+  const liquidationClosingRef = React.useRef(false);
 
   const loadPositions = React.useCallback(async () => {
     if (!address) {
@@ -154,6 +159,81 @@ export default function TradePage() {
       price: midPrice,
     }));
   }, [midPrice]);
+
+  React.useEffect(() => {
+    if (!activePositions.length || liquidationClosingRef.current) return;
+
+    const pricedPositions = activePositions
+      .map((position) => {
+        const market = pairs.find((item) => item.pair === position.symbol);
+        const markPrice = Number(market?.price || 0);
+        const entryPrice = Number(position.entry_price);
+        const liquidationPrice = Number(position.liquidation_price || 0);
+        const liquidationDistance = Math.abs(entryPrice - liquidationPrice);
+        if (markPrice <= 0 || liquidationPrice <= 0 || liquidationDistance <= 0) return null;
+        const adverseMove = position.direction === "LONG"
+          ? entryPrice - markPrice
+          : markPrice - entryPrice;
+        return { position, markPrice, progress: adverseMove / liquidationDistance };
+      })
+      .filter(Boolean) as Array<{ position: any; markPrice: number; progress: number }>;
+
+    pricedPositions.forEach(({ position, progress }) => {
+      if (progress >= 0.9 && progress < 1 && !liquidationWarningsRef.current.has(position.position_id)) {
+        liquidationWarningsRef.current.add(position.position_id);
+        addNotification({
+          type: "liquidation_warning",
+          title: "Liquidation risk above 90%",
+          message: `${position.symbol} is close to its liquidation price of $${Number(position.liquidation_price).toFixed(2)}.`,
+        });
+        toast.warning(`${position.symbol} is close to liquidation`);
+      }
+    });
+
+    if (!pricedPositions.some(({ progress }) => progress >= 1)) return;
+    liquidationClosingRef.current = true;
+
+    const closeAllPositions = async () => {
+      let closedCount = 0;
+      for (const position of activePositions) {
+        const market = pairs.find((item) => item.pair === position.symbol);
+        const closingPrice = Number(market?.price || 0);
+        if (closingPrice <= 0) continue;
+        const quantity = Number(position.quantity);
+        const entryPrice = Number(position.entry_price);
+        const pnl = position.direction === "LONG"
+          ? (closingPrice - entryPrice) * quantity
+          : (entryPrice - closingPrice) * quantity;
+        const margin = entryPrice * quantity / Number(position.leverage || 1);
+        const roi = margin > 0 ? (pnl / margin) * 100 : 0;
+        await closePositionApi({
+          position_id: position.position_id,
+          trader_wallet_address: position.trader_wallet_address,
+          closing_price: closingPrice,
+          updated_at: new Date().toISOString(),
+          status: "CLOSED",
+          Pnl: pnl,
+          Roi: roi,
+        });
+        closedCount += 1;
+      }
+      addNotification({
+        type: "liquidation",
+        title: "Positions liquidated",
+        message: `${closedCount} open position${closedCount === 1 ? " was" : "s were"} force-closed after the liquidation threshold was reached.`,
+      });
+      toast.error("Liquidation threshold reached. All positions were closed.");
+      await Promise.all([loadPositions(), loadTradeHistory()]);
+    };
+
+    closeAllPositions()
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Forced liquidation failed");
+      })
+      .finally(() => {
+        liquidationClosingRef.current = false;
+      });
+  }, [activePositions, loadPositions, loadTradeHistory, pairs]);
 
   React.useEffect(() => {
     bookTickerRef.current = {

@@ -8,6 +8,7 @@ import type {
   TraderDashboardPosition,
 } from "@/types/trader-dashboard";
 import type { LimitOrder } from "@/types/limit-order";
+import { calculateWalletLiquidationPrices } from "@/lib/trading/calculation";
 
 function toNumber(value: unknown) {
   const numberValue = Number(value);
@@ -181,6 +182,10 @@ export async function getTraderDashboard(
   const walletBalance = portfolioData?.wallet_balance ?? 0;
   const copyWalletBalance = portfolioData?.copy_wallet_balance ?? 0;
   const totalWalletBalance = walletBalance + copyWalletBalance;
+  const activePositionsWithLiquidation = calculateWalletLiquidationPrices(
+    activePositions,
+    { manual: walletBalance, copy: copyWalletBalance },
+  );
 
   const recentActivity = [
     ...positions.map(createActivityFromPosition),
@@ -190,7 +195,7 @@ export async function getTraderDashboard(
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     )
-    .slice(0, 10);
+    .slice(0, 5);
 
   return {
     trader_wallet_address: traderWalletAddress,
@@ -217,7 +222,7 @@ export async function getTraderDashboard(
       copyPerformance,
       allPerformance,
     },
-    activePositions,
+    activePositions: activePositionsWithLiquidation,
     closedPositions,
     openOrders,
     recentActivity,
@@ -289,6 +294,38 @@ export async function transferCopyWalletToManualWallet({
   }
 
   return traderDashboardRepository.moveCopyWalletToWallet({
+    traderWalletAddress,
+    amount,
+  });
+}
+
+export async function transferManualWalletToCopyWallet({
+  traderWalletAddress,
+  amount,
+}: {
+  traderWalletAddress: string;
+  amount: number;
+}) {
+  if (amount <= 0) {
+    throw new Error("Transfer amount must be greater than 0");
+  }
+
+  const [portfolio, activeManualMargin] = await Promise.all([
+    traderDashboardRepository.ensurePortfolio(traderWalletAddress),
+    positionRepository.getOpenManualMargin({
+      traderWalletAddress,
+    }),
+  ]);
+  const manualBalance = toNumber(portfolio.wallet_balance);
+  const manualFreeCollateral = Math.max(manualBalance - activeManualMargin, 0);
+
+  if (amount > manualFreeCollateral) {
+    throw new Error(
+      `Only ${manualFreeCollateral.toFixed(2)} USDC is available to transfer from manual wallet.`,
+    );
+  }
+
+  return traderDashboardRepository.moveWalletToCopyWallet({
     traderWalletAddress,
     amount,
   });

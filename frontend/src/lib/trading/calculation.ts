@@ -48,3 +48,53 @@ export function calculateTradeMetrics({
     liquidationPrice,
   };
 }
+
+type LiquidationPosition = {
+  position_id: string;
+  quantity: number;
+  entry_price: number;
+  direction: "LONG" | "SHORT";
+  trade_source?: "OWN" | "COPY";
+  copied_from_master?: string | null;
+};
+
+/**
+ * Calculates cross-margin liquidation prices from current wallet equity.
+ * Manual and copy positions use separate wallets. Other positions are assumed
+ * flat while the selected position moves toward liquidation.
+ */
+export function calculateWalletLiquidationPrices<T extends LiquidationPosition>(
+  positions: T[],
+  balances: { manual: number; copy: number },
+  maintenanceMarginRate = 0.005,
+) {
+  const isCopy = (position: T) =>
+    position.trade_source === "COPY" || Boolean(position.copied_from_master);
+  const maintenance = (position: T) =>
+    Number(position.quantity) *
+    Number(position.entry_price) *
+    maintenanceMarginRate;
+  const totalMaintenance = {
+    manual: positions
+      .filter((position) => !isCopy(position))
+      .reduce((sum, position) => sum + maintenance(position), 0),
+    copy: positions
+      .filter(isCopy)
+      .reduce((sum, position) => sum + maintenance(position), 0),
+  };
+
+  return positions.map((position) => {
+    const wallet = isCopy(position) ? "copy" : "manual";
+    const quantity = Number(position.quantity);
+    const entryPrice = Number(position.entry_price);
+    const equityBuffer = Number(balances[wallet]) - totalMaintenance[wallet];
+    const liquidationPrice =
+      quantity <= 0
+        ? 0
+        : position.direction === "LONG"
+          ? Math.max(entryPrice - equityBuffer / quantity, 0)
+          : entryPrice + equityBuffer / quantity;
+
+    return { ...position, liquidation_price: Math.max(liquidationPrice, 0) };
+  });
+}

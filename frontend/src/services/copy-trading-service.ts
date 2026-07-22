@@ -1,4 +1,3 @@
-import { calculateTradeMetrics } from "@/lib/trading/calculation";
 import {
   getEnabledCopyFollowers,
   openCopiedTradeOnChain,
@@ -142,13 +141,6 @@ async function openOrIncreaseCopiedPosition({
   const entryPrice = Number(masterTrade.entry_price);
   const leverage = Number(masterTrade.leverage);
   const quantity = (copiedMargin * leverage) / entryPrice;
-  const tradeMetrics = calculateTradeMetrics({
-    quantity,
-    entry_price: entryPrice,
-    leverage,
-    direction: masterTrade.direction,
-  });
-
   const createdPosition = await positionRepository.createMarketOrder({
     trader_wallet_address: follower,
     symbol: masterTrade.symbol,
@@ -161,7 +153,6 @@ async function openOrIncreaseCopiedPosition({
     trade_source: "COPY",
     copied_from_master: masterTrade.trader_wallet_address,
     copy_trade_position_id: copyTradePositionId,
-    liquidation_price: tradeMetrics.liquidationPrice,
   });
 
   await syncOpenPositionCount(follower);

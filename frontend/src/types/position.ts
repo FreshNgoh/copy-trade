@@ -8,7 +8,7 @@ export interface Position {
   leverage: number;
   stop_loss: number | null;
   take_profit: number | null;
-  liquidation_price: number;
+  liquidation_price?: number;
   status: "OPEN" | "CLOSED" | "CANCELLED" | "LIQUIDATED";
   trade_source?: "OWN" | "COPY";
   copied_from_master?: string | null;

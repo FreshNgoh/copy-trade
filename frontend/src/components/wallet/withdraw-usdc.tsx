@@ -13,6 +13,7 @@ import { wagmiConfig } from "@/lib/wagmi";
 import { withdrawTraderBalanceApi } from "@/lib/api/trader-dashboard-api";
 import { CONTRACTS } from "@/lib/web3/constants/contracts";
 import vault from "@/lib/web3/abi/vault-abi.json";
+import { addNotification } from "@/lib/notifications";
 
 const vaultAbi = vault.abi as Abi;
 const DEMO_ETH_USDC_PRICE = 3000;
@@ -75,6 +76,11 @@ export function WithdrawUSDC({ onSuccess }: { onSuccess?: () => void }) {
       });
 
       toast.success("Withdraw successful");
+      addNotification({
+        type: "withdraw",
+        title: "Withdrawal completed",
+        message: `${Number(amount).toFixed(2)} USDC was withdrawn from your Manual Wallet.`,
+      });
 
       setAmount("");
       setStep("method");

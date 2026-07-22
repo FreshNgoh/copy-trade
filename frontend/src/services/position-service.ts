@@ -1,6 +1,6 @@
 import { positionRepository } from "@/repositories/position-repository";
 import { traderDashboardRepository } from "@/repositories/trader-dashboard-repository";
-import { calculateTradeMetrics } from "@/lib/trading/calculation";
+import { calculateTradeMetrics, calculateWalletLiquidationPrices } from "@/lib/trading/calculation";
 import { copyMasterPositionToFollowers } from "@/services/copy-trading-service";
 import { closeCopiedTradeOnChain } from "@/lib/web3/copy-trading/server";
 import type {
@@ -202,7 +202,7 @@ export async function openOrIncreasePosition(data: CreatePositionDTO) {
     throw new Error("Leverage must be greater than 0");
   }
 
-  const tradeMetrics = await assertSufficientFreeCollateral(data);
+  await assertSufficientFreeCollateral(data);
   const existingPosition = await positionRepository.getOpenPosition({
     trader_wallet_address: data.trader_wallet_address,
     symbol: data.symbol,
@@ -212,7 +212,6 @@ export async function openOrIncreasePosition(data: CreatePositionDTO) {
   if (!existingPosition) {
     const createdPosition = await positionRepository.createMarketOrder({
       ...data,
-      liquidation_price: tradeMetrics.liquidationPrice,
     });
 
     await syncOpenPositionCount(data.trader_wallet_address);
@@ -223,26 +222,16 @@ export async function openOrIncreasePosition(data: CreatePositionDTO) {
 
   const oldQty = Number(existingPosition.quantity);
   const oldEntryPrice = Number(existingPosition.entry_price);
-  const existingLeverage = Number(existingPosition.leverage);
-
   const newQty = oldQty + Number(data.quantity);
 
   const averageEntryPrice =
     (oldQty * oldEntryPrice +
       Number(data.quantity) * Number(data.entry_price)) /
     newQty;
-  const updatedMetrics = calculateTradeMetrics({
-    quantity: newQty,
-    entry_price: averageEntryPrice,
-    leverage: existingLeverage,
-    direction: data.direction,
-  });
-
   const updatedPosition = await positionRepository.updatePositionAfterFill({
     position_id: existingPosition.position_id,
     quantity: newQty,
     entry_price: averageEntryPrice,
-    liquidation_price: updatedMetrics.liquidationPrice,
   });
 
   await syncCopiedFollowers(data);
@@ -259,7 +248,15 @@ async function syncCopiedFollowers(data: CreatePositionDTO) {
 }
 
 export async function getOpenPositions(traderWalletAddress: string) {
-  return positionRepository.getOpenPositions(traderWalletAddress);
+  const [positions, portfolio] = await Promise.all([
+    positionRepository.getOpenPositions(traderWalletAddress),
+    traderDashboardRepository.ensurePortfolio(traderWalletAddress),
+  ]);
+
+  return calculateWalletLiquidationPrices(positions, {
+    manual: toNumber(portfolio.wallet_balance),
+    copy: toNumber(portfolio.copy_wallet_balance),
+  });
 }
 
 export async function closePosition(position: ClosePositionDTO) {

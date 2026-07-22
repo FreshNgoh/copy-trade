@@ -19,6 +19,7 @@ import { wagmiConfig } from "@/lib/wagmi";
 import { addTraderDepositApi } from "@/lib/api/trader-dashboard-api";
 import { CONTRACTS } from "@/lib/web3/constants/contracts";
 import vault from "@/lib/web3/abi/vault-abi.json";
+import { addNotification } from "@/lib/notifications";
 
 const vaultAbi = vault.abi as Abi;
 const DEMO_ETH_USDC_PRICE = 3000;
@@ -93,6 +94,11 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
       });
 
       toast.success("Deposit successful");
+      addNotification({
+        type: "deposit",
+        title: "Deposit completed",
+        message: `${Number(amount).toFixed(2)} USDC was added to your Manual Wallet.`,
+      });
 
       setAmount("");
       setStep("method");

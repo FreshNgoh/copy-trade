@@ -18,7 +18,6 @@ export class PositionRepository {
         leverage: data.leverage,
         stop_loss: data.stop_loss,
         take_profit: data.take_profit,
-        liquidation_price: data.liquidation_price,
         trade_source: data.trade_source ?? "OWN",
         copied_from_master: data.copied_from_master ?? null,
         copy_trade_position_id: data.copy_trade_position_id ?? null,
@@ -96,6 +95,34 @@ export class PositionRepository {
         (Number(position.quantity) * Number(position.entry_price)) / leverage
       );
     }, 0);
+  }
+
+  async getOpenManualMargin({
+    traderWalletAddress,
+  }: {
+    traderWalletAddress: string;
+  }) {
+    const { data: positions, error } = await supabase
+      .from("positions")
+      .select("quantity,entry_price,leverage,trade_source,copied_from_master")
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .eq("status", "OPEN");
+
+    if (error) throw error;
+
+    return (positions ?? [])
+      .filter(
+        (position) =>
+          position.trade_source !== "COPY" && !position.copied_from_master,
+      )
+      .reduce((total, position) => {
+      const leverage = Number(position.leverage);
+      return leverage > 0
+        ? total +
+            (Number(position.quantity) * Number(position.entry_price)) /
+              leverage
+        : total;
+      }, 0);
   }
 
   async closePosition(data: ClosePositionDTO) {
@@ -354,19 +381,16 @@ export class PositionRepository {
     position_id,
     quantity,
     entry_price,
-    liquidation_price,
   }: {
     position_id: string;
     quantity: number;
     entry_price: number;
-    liquidation_price: number;
   }) {
     const { data, error } = await supabase
       .from("positions")
       .update({
         quantity,
         entry_price,
-        liquidation_price,
         updated_at: new Date().toISOString(),
       })
       .eq("position_id", position_id)

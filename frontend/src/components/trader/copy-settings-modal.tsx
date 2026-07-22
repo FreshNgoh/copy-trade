@@ -124,16 +124,9 @@ export function CopySettingsModal({
       setSubmitting(true);
 
       const dashboard = await getTraderDashboardApi(address);
-      const existingAllocation = currentSettings?.enabled
-        ? Number(formatUnits(currentSettings.maxCopyAmount, 6))
-        : 0;
-      const allocationIncrease = investment - existingAllocation;
-
-      if (allocationIncrease > Number(dashboard.stats.walletBalance || 0)) {
+      if (investment > Number(dashboard.stats.copyWalletBalance || 0)) {
         throw new Error(
-          `Insufficient manual wallet balance. Need ${allocationIncrease.toFixed(
-            2,
-          )} USDC available to move into copy wallet.`,
+          `Insufficient Copy Wallet balance. Transfer ${(investment - dashboard.stats.copyWalletBalance).toFixed(2)} USDC from your Manual Wallet first.`,
         );
       }
 
@@ -328,7 +321,7 @@ export function CopySettingsModal({
           <div className="bg-warning/5 border border-warning/30 p-3 flex gap-2">
             <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-relaxed">
-              This cap limits how much of your virtual USDC vault balance this master can use. You can pause anytime.
+              This master can only use funds already transferred to your Copy Wallet. You can pause anytime.
             </p>
           </div>
 

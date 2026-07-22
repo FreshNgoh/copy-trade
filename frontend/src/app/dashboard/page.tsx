@@ -9,7 +9,6 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   ensureTraderPortfolioApi,
   getTraderDashboardApi,
-  transferCopyWalletToManualApi,
 } from "@/lib/api/trader-dashboard-api";
 import type {
   TraderDashboard,
@@ -17,8 +16,9 @@ import type {
   TraderDashboardPosition,
 } from "@/types/trader-dashboard";
 import { cn } from "@/lib/utils";
-import { Wallet, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
+import { WalletPerformanceChart } from "@/components/dashboard/wallet-performance-chart";
 
 const emptyDashboard: TraderDashboard = {
   trader_wallet_address: "",
@@ -129,10 +129,6 @@ export default function DashboardPage() {
   const { address, isConnected } = useAccount();
   const [depositOpen, setDepositOpen] = React.useState(false);
   const [withdrawOpen, setWithdrawOpen] = React.useState(false);
-  const [transferCopyPending, setTransferCopyPending] = React.useState(false);
-  const [performanceView, setPerformanceView] = React.useState<
-    "all" | "manual" | "copy"
-  >("all");
   const [dashboard, setDashboard] =
     React.useState<TraderDashboard>(emptyDashboard);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -163,42 +159,7 @@ export default function DashboardPage() {
     loadDashboard();
   }, [loadDashboard]);
 
-  const transferCopyFreeToManual = async () => {
-    if (!address) {
-      toast.error("Wallet not connected");
-      return;
-    }
-
-    const amount = Number(dashboard.stats.copyFreeCollateral || 0);
-
-    if (amount <= 0) {
-      toast.error("No free copy wallet balance to transfer");
-      return;
-    }
-
-    try {
-      setTransferCopyPending(true);
-      await transferCopyWalletToManualApi({
-        traderWalletAddress: address,
-        amount,
-      });
-      toast.success(`Moved ${formatUsd(amount)} to manual wallet`);
-      await loadDashboard();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Transfer failed");
-    } finally {
-      setTransferCopyPending(false);
-    }
-  };
-
   const stats = dashboard.stats;
-  const selectedPerformance =
-    performanceView === "manual"
-      ? stats.manualPerformance
-      : performanceView === "copy"
-        ? stats.copyPerformance
-        : stats.allPerformance;
-
   return (
     <div data-testid="dashboard-page" className="bg-background min-h-screen">
       <div className="max-w-[1600px] mx-auto px-6 py-8 space-y-6">
@@ -214,13 +175,15 @@ export default function DashboardPage() {
             >
               Dashboard
             </h1>
-            {isConnected && (
-              <div className="font-mono text-xs text-muted-foreground mt-2">
-                Vault: {address?.slice(0, 6)}…{address?.slice(-4)}
-              </div>
-            )}
           </div>
           <div className="flex gap-2">
+            <Link
+              href="/dashboard/transfer"
+              data-testid="transfer-button"
+              className="inline-flex items-center gap-2 border border-accent/50 px-5 py-2.5 text-sm text-accent hover:bg-accent/10"
+            >
+              Transfer
+            </Link>
             <button
               data-testid="deposit-button"
               onClick={() => setDepositOpen(true)}
@@ -270,43 +233,70 @@ export default function DashboardPage() {
 
         {/* Top stats grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border">
-          {([
-            {
-              label: "Total Wallet Value",
-              value: formatUsd(stats.totalPortfolioValue),
-              mono: true,
-            },
-            {
-              label: "Manual Wallet",
-              value: formatUsd(stats.walletBalance),
-              mono: true,
-            },
-            {
-              label: "Copy Wallet",
-              value: formatUsd(stats.copyWalletBalance),
-              mono: true,
-            },
-            {
-              label: "Manual Free",
-              value: formatUsd(stats.freeCollateral),
-              mono: true,
-            },
-          ] as Array<{
-            label: string;
-            value: string;
-            mono: boolean;
-            accent?: string;
-          }>).map((s) => (
-            <div key={s.label} className="bg-surface p-5">
-              <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-2">
-                {s.label}
+          {(
+            [
+              {
+                label: "Total Wallet Value",
+                value: formatUsd(stats.totalPortfolioValue),
+                mono: true,
+              },
+              {
+                label: "Manual Wallet",
+                value: formatUsd(stats.walletBalance),
+                mono: true,
+              },
+              {
+                label: "Copy Wallet",
+                value: formatUsd(stats.copyWalletBalance),
+                mono: true,
+              },
+              {
+                label: "Realized PnL",
+                value: `${stats.realizedPnl >= 0 ? "+" : ""}${formatUsd(stats.realizedPnl)}`,
+                mono: true,
+                accent: stats.realizedPnl >= 0 ? "text-success" : "text-danger",
+                action: true,
+              },
+            ] as Array<{
+              label: string;
+              value: string;
+              mono: boolean;
+              accent?: string;
+              action?: boolean;
+            }>
+          ).map((s) => {
+            const content = (
+              <>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-2">
+                  {s.label}
+                </div>
+                <div className={cn("font-mono text-2xl", s.accent)}>
+                  {s.value}
+                </div>
+                {s.action && (
+                  <div className="mt-2 text-[9px] font-mono uppercase tracking-wider text-accent opacity-70 group-hover:opacity-100">
+                    Open analytics →
+                  </div>
+                )}
+              </>
+            );
+            return s.action ? (
+              <Link
+                key={s.label}
+                href="/dashboard/performance"
+                className="group bg-surface p-5 text-left hover:bg-surface-hover"
+              >
+                {content}
+              </Link>
+            ) : (
+              <div key={s.label} className="bg-surface p-5 text-left">
+                {content}
               </div>
-              <div className={cn("font-mono text-2xl", s.accent)}>
-                {s.value}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+
+        <WalletPerformanceChart dashboard={dashboard} />
 
         {/* Main grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -401,177 +391,6 @@ export default function DashboardPage() {
                   No active positions.
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Wallet summary */}
-          <div className="bg-surface border border-border p-5">
-            <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-4">
-              ▎ Vault
-            </div>
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 bg-accent/10 border border-accent/30 flex items-center justify-center">
-                <Wallet className="w-4 h-4 text-accent" />
-              </div>
-              <div>
-                <div className="font-mono text-sm">
-                  {isConnected
-                    ? `${address?.slice(0, 6)}…${address?.slice(-4)}`
-                    : "Not connected"}
-                </div>
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                  {isConnected ? "Sepolia Testnet" : "Connect to view"}
-                </div>
-              </div>
-            </div>
-            <div className="space-y-3 pt-3 border-t border-border">
-              <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                  USDC
-                </span>
-                <span className="font-mono text-sm">
-                  {stats.walletBalance.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                  Copy USDC
-                </span>
-                <span className="font-mono text-sm">
-                  {stats.copyWalletBalance.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                  Copy Free
-                </span>
-                <span className="font-mono text-sm">
-                  {stats.copyFreeCollateral.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={transferCopyFreeToManual}
-                disabled={transferCopyPending || stats.copyFreeCollateral <= 0}
-                className={cn(
-                  "w-full border px-3 py-2 text-[10px] uppercase tracking-wider font-mono",
-                  stats.copyFreeCollateral > 0
-                    ? "border-accent text-accent hover:bg-accent/10"
-                    : "border-border text-muted-foreground cursor-not-allowed",
-                )}
-              >
-                {transferCopyPending
-                  ? "Transferring..."
-                  : "Move Copy Free to Manual"}
-              </button>
-              <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                  Positions
-                </span>
-                <span className="font-mono text-sm">
-                  {stats.openPositionsCount}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                  Followers
-                </span>
-                <span className="font-mono text-sm">
-                  {stats.followers.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Trader stats & activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-surface border border-border">
-            <div className="px-5 py-3 border-b border-border flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                ▎ Trader Performance
-              </span>
-              <div className="inline-flex w-fit border border-border bg-background p-0.5">
-                {[
-                  { id: "all", label: "All" },
-                  { id: "manual", label: "Manual" },
-                  { id: "copy", label: "Copy" },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() =>
-                      setPerformanceView(item.id as "all" | "manual" | "copy")
-                    }
-                    className={cn(
-                      "px-3 py-1.5 text-[10px] uppercase tracking-wider font-mono",
-                      performanceView === item.id
-                        ? "bg-white text-black"
-                        : "text-muted-foreground hover:text-white",
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border">
-              {[
-                {
-                  label: "Closed Trades",
-                  value: selectedPerformance.closedTradesCount.toString(),
-                },
-                {
-                  label: "Win Rate",
-                  value: `${selectedPerformance.winRate.toFixed(1)}%`,
-                },
-                {
-                  label: "Avg ROI",
-                  value: `${selectedPerformance.averageRoi >= 0 ? "+" : ""}${selectedPerformance.averageRoi.toFixed(2)}%`,
-                  accent:
-                    selectedPerformance.averageRoi >= 0
-                      ? "text-success"
-                      : "text-danger",
-                },
-                {
-                  label:
-                    performanceView === "copy" ? "Net Copy PnL" : "Realized PnL",
-                  value: `${selectedPerformance.realizedPnl >= 0 ? "+" : ""}${formatUsd(selectedPerformance.realizedPnl)}`,
-                  accent:
-                    selectedPerformance.realizedPnl >= 0
-                      ? "text-success"
-                      : "text-danger",
-                },
-              ].map((item) => (
-                <div key={item.label} className="bg-surface p-5">
-                  <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-2">
-                    {item.label}
-                  </div>
-                  <div className={cn("font-mono text-xl", item.accent)}>
-                    {item.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="px-5 py-4 border-t border-border text-xs text-muted-foreground">
-              {performanceView === "copy"
-                ? `Copy view uses follower net PnL after split. Gross copied PnL: ${formatUsd(
-                    selectedPerformance.grossPnl,
-                  )}. Master share: ${formatUsd(
-                    selectedPerformance.masterRewards,
-                  )}. Follower share: ${formatUsd(
-                    selectedPerformance.followerRewards,
-                  )}.`
-                : "Manual view only counts positions opened by this wallet itself."}
             </div>
           </div>
 

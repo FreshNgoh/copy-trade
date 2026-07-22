@@ -2,6 +2,7 @@ import {
   addTraderWalletBalance,
   ensureTraderPortfolio,
   getTraderDashboard,
+  transferManualWalletToCopyWallet,
   transferCopyWalletToManualWallet,
   withdrawTraderWalletBalance,
 } from "@/services/trader-dashboard-service";
@@ -90,6 +91,11 @@ export async function PATCH(req: NextRequest) {
       });
     } else if (body.action === "transfer_copy_to_manual") {
       portfolio = await transferCopyWalletToManualWallet({
+        traderWalletAddress,
+        amount,
+      });
+    } else if (body.action === "transfer_manual_to_copy") {
+      portfolio = await transferManualWalletToCopyWallet({
         traderWalletAddress,
         amount,
       });
