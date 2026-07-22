@@ -13,6 +13,19 @@ export type SaveCopySettingsInput = {
 };
 
 export class CopyTradingRepository {
+  async getFollowersForMaster(masterWalletAddress: string) {
+    const { data, error } = await supabase
+      .from("copy_trading_followers")
+      .select(
+        "id,follower_wallet_address,max_copy_amount,enabled,created_at,updated_at,last_copied_at",
+      )
+      .ilike("master_wallet_address", masterWalletAddress)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
   async getActiveCopyAllocation({
     followerWalletAddress,
     excludeMasterWalletAddress,
@@ -177,6 +190,32 @@ export class CopyTradingRepository {
       maxCopyAmount: Number(row.max_copy_amount || 0),
       maxAllocationBps: Number(row.max_allocation_bps || 0),
     }));
+  }
+
+  async disableAllForFollower(followerWalletAddress: string) {
+    const { data, error } = await supabase
+      .from("copy_trading_followers")
+      .update({
+        enabled: false,
+        last_copy_status: "FAILED",
+        last_copy_error: "Copy Wallet liquidated",
+        updated_at: new Date().toISOString(),
+      })
+      .ilike("follower_wallet_address", followerWalletAddress)
+      .eq("enabled", true)
+      .select("master_wallet_address");
+
+    if (error) throw error;
+
+    await Promise.all(
+      Array.from(
+        new Set((data ?? []).map((row) => row.master_wallet_address as string)),
+      ).map((masterWalletAddress) =>
+        this.syncMasterFollowerCount(masterWalletAddress),
+      ),
+    );
+
+    return data ?? [];
   }
 
   async saveCopySuccess({

@@ -214,7 +214,9 @@ export async function getTraderDashboard(
     trader_wallet_address: traderWalletAddress,
     portfolio: portfolioData,
     stats: {
-      totalPortfolioValue: totalWalletBalance + realizedPnl,
+      // Wallet balances are settlement balances: realized PnL has already been
+      // credited or debited, so adding it again double-counts trade results.
+      totalPortfolioValue: totalWalletBalance,
       walletBalance,
       copyWalletBalance,
       totalWalletBalance,

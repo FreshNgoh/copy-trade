@@ -112,8 +112,11 @@ function getPositionNotional(position: TraderDashboardPosition) {
 }
 
 function getPositionSourceLabel(position: TraderDashboardPosition) {
+  if (position.trade_source === "MASTER_COPY") {
+    return "Master Copy";
+  }
+
   if (
-    position.trade_source === "MASTER_COPY" ||
     position.trade_source === "COPY" ||
     position.copied_from_master
   ) {
@@ -237,6 +240,14 @@ export default function DashboardPage() {
             </h1>
           </div>
           <div className="flex gap-2">
+            {dashboard.portfolio?.is_verified_master && (
+              <Link
+                href="/dashboard/followers"
+                className="inline-flex items-center gap-2 border border-border px-5 py-2.5 text-sm hover:border-accent hover:text-accent"
+              >
+                Followers ({stats.followers})
+              </Link>
+            )}
             <Link
               href="/dashboard/transfer"
               data-testid="transfer-button"

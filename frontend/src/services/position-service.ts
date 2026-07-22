@@ -2,6 +2,7 @@ import { positionRepository } from "@/repositories/position-repository";
 import { traderDashboardRepository } from "@/repositories/trader-dashboard-repository";
 import { calculateTradeMetrics, calculateWalletLiquidationPrices } from "@/lib/trading/calculation";
 import { copyMasterPositionToFollowers } from "@/services/copy-trading-service";
+import { copyTradingRepository } from "@/repositories/copy-trading-repository";
 import { closeCopiedTradeOnChain } from "@/lib/web3/copy-trading/server";
 import type {
   ClosePositionDTO,
@@ -297,35 +298,40 @@ async function settleClosedPositionRewards(position) {
 
   if (!shouldSettle) return;
 
-  if (isCopiedPosition(position)) {
-    await applyCopyWalletDelta(
-      position.trader_wallet_address,
-      rewards.followerReward,
-    );
+  try {
+    if (isCopiedPosition(position)) {
+      await applyCopyWalletDelta(
+        position.trader_wallet_address,
+        rewards.followerReward,
+      );
 
-    if (rewards.masterReward > 0 && position.copied_from_master) {
-      await applyWalletDelta(position.copied_from_master, rewards.masterReward);
+      if (rewards.masterReward > 0 && position.copied_from_master) {
+        await applyWalletDelta(position.copied_from_master, rewards.masterReward);
+      }
+
+      position.gross_pnl = grossPnl;
+      position.master_reward = rewards.masterReward;
+      position.follower_reward = rewards.followerReward;
+      return;
     }
 
-    position.gross_pnl = grossPnl;
-    position.master_reward = rewards.masterReward;
-    position.follower_reward = rewards.followerReward;
-    return;
-  }
+    if (usesCopyWallet(position)) {
+      await applyCopyWalletDelta(position.trader_wallet_address, grossPnl);
+      position.gross_pnl = grossPnl;
+      position.master_reward = 0;
+      position.follower_reward = 0;
+      return;
+    }
 
-  if (usesCopyWallet(position)) {
-    await applyCopyWalletDelta(position.trader_wallet_address, grossPnl);
+    await applyWalletDelta(position.trader_wallet_address, grossPnl);
     position.gross_pnl = grossPnl;
     position.master_reward = 0;
     position.follower_reward = 0;
-    return;
+  } catch (error) {
+    // Allow a later close retry to finish settlement if an external write fails.
+    await positionRepository.resetRewardsSettlement(position.position_id);
+    throw error;
   }
-
-  await applyWalletDelta(position.trader_wallet_address, grossPnl);
-
-  position.gross_pnl = grossPnl;
-  position.master_reward = 0;
-  position.follower_reward = 0;
 }
 
 async function releaseCopiedMargin(position) {
@@ -400,10 +406,14 @@ async function applyCopyWalletDelta(traderWalletAddress: string, amount: number)
     return;
   }
 
-  await traderDashboardRepository.subtractCopyWalletBalance({
+  const portfolio = await traderDashboardRepository.subtractCopyWalletBalance({
     traderWalletAddress,
     amount: Math.abs(amount),
   });
+
+  if (toNumber(portfolio.copy_wallet_balance) <= 0) {
+    await copyTradingRepository.disableAllForFollower(traderWalletAddress);
+  }
 }
 
 function isCopiedPosition(position) {

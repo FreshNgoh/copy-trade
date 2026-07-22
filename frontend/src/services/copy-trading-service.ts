@@ -18,9 +18,12 @@ export async function copyMasterPositionToFollowers(masterTrade: CreatePositionD
 
   if (requestedMargin <= 0) return [];
 
-  const savedFollowers = await copyTradingRepository.getEnabledFollowers(masterTrade.trader_wallet_address);
+  const [savedSettings, savedFollowers] = await Promise.all([
+    copyTradingRepository.getFollowersForMaster(masterTrade.trader_wallet_address),
+    copyTradingRepository.getEnabledFollowers(masterTrade.trader_wallet_address),
+  ]);
   const followers =
-    savedFollowers.length > 0
+    savedSettings.length > 0
       ? savedFollowers
       : await getEnabledCopyFollowers(masterTrade.trader_wallet_address);
   const results: CopyResult[] = [];

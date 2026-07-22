@@ -6,6 +6,19 @@ import {
 } from "@/types/position";
 
 export class PositionRepository {
+  async getCopiedPositionsForMaster(masterWalletAddress: string) {
+    const { data, error } = await supabase
+      .from("positions")
+      .select(
+        "position_id,trader_wallet_address,status,Pnl,follower_reward,master_reward,created_at,updated_at",
+      )
+      .ilike("copied_from_master", masterWalletAddress)
+      .eq("trade_source", "COPY");
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
   async createMarketOrder(data: CreatePositionDTO) {
     const { data: position, error } = await supabase
       .from("positions")
@@ -266,6 +279,19 @@ export class PositionRepository {
     }
 
     return Boolean(data);
+  }
+
+  async resetRewardsSettlement(positionId: string) {
+    const { error } = await supabase
+      .from("positions")
+      .update({
+        rewards_settled: false,
+        reward_settled_at: null,
+      })
+      .eq("position_id", positionId)
+      .eq("status", "CLOSED");
+
+    if (error) throw error;
   }
 
   async getClosedPositions(traderWalletAddress: string) {

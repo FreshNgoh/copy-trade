@@ -333,6 +333,15 @@ export default function TradePage() {
     [activePair.pair, activePositions],
   );
 
+  const markPrices = React.useMemo(
+    () =>
+      Object.fromEntries([
+        ...pairs.map((market) => [market.pair, Number(market.price)]),
+        [activePair.pair, Number(activePair.price)],
+      ]),
+    [activePair, pairs],
+  );
+
   React.useEffect(() => {
     if (!hasOpenOrdersForActivePair && !hasTriggerablePositionsForActivePair) {
       return;
@@ -527,7 +536,7 @@ export default function TradePage() {
         {tab === "positions" && (
           <PositionsTable
             activePositions={activePositions}
-            activePair={activePair}
+            markPrices={markPrices}
             setActivePositions={setActivePositions}
             setClosedPositions={setClosedPositions}
           />

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
   Shield,
@@ -11,6 +12,7 @@ import {
   Twitter,
   Loader2,
   RefreshCcw,
+  ChevronRight,
 } from "lucide-react";
 import { CopySettingsModal } from "@/components/trader/copy-settings-modal";
 import { WalletAvatar } from "@/components/wallet/wallet-avatar";
@@ -81,10 +83,14 @@ export default function TraderProfilePage() {
       return;
     }
 
-    const loadDashboard = () =>
-      getTraderDashboardApi(traderAddress)
-        .then((dashboard) => {
-        if (!cancelled) {
+    const loadDashboard = async () => {
+      const [dashboardResult] = await Promise.allSettled([
+        getTraderDashboardApi(traderAddress),
+      ]);
+      if (cancelled) return;
+
+      if (dashboardResult.status === "fulfilled") {
+        const dashboard = dashboardResult.value;
           setFollowers(dashboard.stats.followers);
           setTradingCapital(dashboard.stats.copyWalletBalance);
           setMasterCopyPositions(
@@ -92,15 +98,13 @@ export default function TraderProfilePage() {
               (position) => position.trade_source === "MASTER_COPY",
             ),
           );
-        }
-        })
-        .catch(() => {
-        if (!cancelled) {
+      } else {
           setFollowers(null);
           setTradingCapital(null);
           setMasterCopyPositions([]);
-        }
-        });
+      }
+
+    };
 
     loadDashboard();
     const interval = window.setInterval(loadDashboard, 15_000);
@@ -273,12 +277,26 @@ export default function TraderProfilePage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border mb-6">
           {stats.map((s) => (
+            s.l === "Followers" && traderAddress ? (
+            <Link
+              key={s.l}
+              href={`/traders/${traderAddress}/followers`}
+              className="group bg-surface p-4 hover:bg-surface-hover"
+            >
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">
+                {s.l}
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
+              </div>
+              <div className={cn("font-mono text-base", s.c)}>{s.v}</div>
+            </Link>
+            ) : (
             <div key={s.l} className="bg-surface p-4">
               <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">
                 {s.l}
               </div>
               <div className={cn("font-mono text-base", s.c)}>{s.v}</div>
             </div>
+            )
           ))}
         </div>
 

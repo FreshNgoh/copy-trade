@@ -135,14 +135,12 @@ export class TraderDashboardRepository {
     const portfolio = await this.ensurePortfolio(traderWalletAddress);
     const currentBalance = Number(portfolio.copy_wallet_balance || 0);
 
-    if (amount > currentBalance) {
-      throw new Error("Insufficient copy wallet balance");
-    }
-
     const { data: updatedPortfolio, error } = await supabase
       .from("portfolio")
       .update({
-        copy_wallet_balance: currentBalance - amount,
+        // A liquidation cannot create spendable negative collateral. Losses
+        // beyond the remaining equity bankrupt the isolated copy wallet.
+        copy_wallet_balance: Math.max(currentBalance - amount, 0),
       })
       .ilike("trader_wallet_address", traderWalletAddress)
       .select()
