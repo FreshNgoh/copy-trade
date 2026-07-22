@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
-import { ArrowLeft, ArrowRight, ArrowUpDown, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, ArrowUpDown, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -39,6 +39,13 @@ export default function WalletTransferPage() {
   const manualAvailable = dashboard?.stats.freeCollateral ?? 0;
   const copyAvailable = dashboard?.stats.copyFreeCollateral ?? 0;
   const available = direction === "manual_to_copy" ? manualAvailable : copyAvailable;
+  const sourceMargin = direction === "manual_to_copy"
+    ? dashboard?.stats.manualMarginUsed ?? 0
+    : dashboard?.stats.copyMarginUsed ?? 0;
+  const sourcePositionCount = dashboard?.activePositions.filter((position) => {
+    const copyPosition = position.trade_source === "COPY" || Boolean(position.copied_from_master);
+    return direction === "manual_to_copy" ? !copyPosition : copyPosition;
+  }).length ?? 0;
   const from = direction === "manual_to_copy" ? "Manual Wallet" : "Copy Wallet";
   const to = direction === "manual_to_copy" ? "Copy Wallet" : "Manual Wallet";
 
@@ -108,6 +115,22 @@ export default function WalletTransferPage() {
               <button type="button" onClick={() => setAmount(available.toFixed(2))} className="px-4 text-xs font-mono text-accent">MAX</button>
             </div>
           </div>
+          {sourceMargin > 0 && (
+            <div className="mt-5 flex gap-3 border border-warning/40 bg-warning/5 p-4" role="alert">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              <div>
+                <div className="text-xs font-medium text-warning">Liquidation price will change</div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {from} currently supports {sourcePositionCount} open position{sourcePositionCount === 1 ? "" : "s"} using ${sourceMargin.toFixed(2)} margin. Transferring funds out reduces the wallet&apos;s collateral buffer and moves liquidation prices closer to the market price.
+                </p>
+                {Number(amount) > 0 && (
+                  <div className="mt-2 font-mono text-[10px] text-warning">
+                    Remaining transferable collateral: ${Math.max(available - Number(amount), 0).toFixed(2)}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           <button data-testid="confirm-transfer" type="button" disabled={pending || !address} onClick={submit} className="mt-5 flex w-full items-center justify-center gap-2 bg-white px-5 py-3 text-sm font-medium text-black hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50">
             {pending ? "Transferring…" : <>Transfer to {to} <ArrowRight className="h-4 w-4" /></>}
           </button>

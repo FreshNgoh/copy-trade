@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { TraderDashboard, TraderDashboardPosition } from "@/types/trader-dashboard";
 import { cn } from "@/lib/utils";
+import { BINANCE_TESTNET_BASE, SYMBOL_MAP } from "@/lib/trading/binance";
 
 type Range = "1D" | "1W" | "1M";
 type WalletView = "manual" | "copy";
@@ -34,6 +35,58 @@ function settledPnl(position: TraderDashboardPosition) {
 export function WalletPerformanceChart({ dashboard }: { dashboard: TraderDashboard }) {
   const [range, setRange] = React.useState<Range>("1W");
   const [wallet, setWallet] = React.useState<WalletView>("manual");
+  const [markPrices, setMarkPrices] = React.useState<Record<string, number>>({});
+  const symbols = React.useMemo(
+    () => [...new Set(dashboard.activePositions.map((position) => position.symbol))],
+    [dashboard.activePositions],
+  );
+
+  React.useEffect(() => {
+    if (!symbols.length) {
+      setMarkPrices({});
+      return;
+    }
+    let cancelled = false;
+    const loadPrices = async () => {
+      const prices = await Promise.all(
+        symbols.map(async (symbol) => {
+          const ticker = SYMBOL_MAP[symbol];
+          if (!ticker) return [symbol, 0] as const;
+          try {
+            const response = await fetch(`${BINANCE_TESTNET_BASE}/fapi/v1/ticker/price?symbol=${ticker}`);
+            if (!response.ok) return [symbol, 0] as const;
+            const data = await response.json();
+            return [symbol, Number(data.price || 0)] as const;
+          } catch {
+            return [symbol, 0] as const;
+          }
+        }),
+      );
+      if (!cancelled) setMarkPrices(Object.fromEntries(prices));
+    };
+    loadPrices();
+    const interval = window.setInterval(loadPrices, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [symbols]);
+
+  const unrealizedPnl = React.useMemo(
+    () => dashboard.activePositions
+      .filter((position) => (wallet === "copy") === isCopy(position))
+      .reduce((total, position) => {
+        const markPrice = markPrices[position.symbol];
+        if (!markPrice) return total + Number(position.Pnl ?? 0);
+        const quantity = Number(position.quantity);
+        const entryPrice = Number(position.entry_price);
+        return total + (position.direction === "LONG"
+          ? (markPrice - entryPrice) * quantity
+          : (entryPrice - markPrice) * quantity);
+      }, 0),
+    [dashboard.activePositions, markPrices, wallet],
+  );
+
   const data = React.useMemo(() => {
     const now = Date.now();
     const start = now - RANGE_MS[range];
@@ -45,11 +98,12 @@ export function WalletPerformanceChart({ dashboard }: { dashboard: TraderDashboa
       }))
       .filter((event) => Number.isFinite(event.time) && event.time >= start && event.time <= now)
       .sort((a, b) => a.time - b.time);
-    const endingValue = wallet === "copy"
-      ? dashboard.stats.copyWalletBalance + dashboard.stats.copyPerformance.realizedPnl
-      : dashboard.stats.walletBalance + dashboard.stats.manualPerformance.realizedPnl;
+    const walletBalance = wallet === "copy"
+      ? dashboard.stats.copyWalletBalance
+      : dashboard.stats.walletBalance;
+    const endingValue = walletBalance + unrealizedPnl;
     const periodPnl = events.reduce((total, event) => total + event.pnl, 0);
-    let value = endingValue - periodPnl;
+    let value = walletBalance - periodPnl;
     const points = [{ time: start, value }];
     events.forEach((event) => {
       value += event.pnl;
@@ -57,7 +111,7 @@ export function WalletPerformanceChart({ dashboard }: { dashboard: TraderDashboa
     });
     points.push({ time: now, value: endingValue });
     return points;
-  }, [dashboard, range, wallet]);
+  }, [dashboard, range, unrealizedPnl, wallet]);
 
   const startValue = data[0]?.value ?? 0;
   const endValue = data[data.length - 1]?.value ?? 0;
@@ -71,7 +125,7 @@ export function WalletPerformanceChart({ dashboard }: { dashboard: TraderDashboa
           <div className="mt-2 flex items-baseline gap-3">
             <span className="font-mono text-2xl">${endValue.toFixed(2)}</span>
             <span className={cn("font-mono text-xs", change >= 0 ? "text-success" : "text-danger")}>
-              {change >= 0 ? "+" : ""}${change.toFixed(2)}
+              {change >= 0 ? "+" : "-"}${Math.abs(change).toFixed(2)}
             </span>
           </div>
         </div>

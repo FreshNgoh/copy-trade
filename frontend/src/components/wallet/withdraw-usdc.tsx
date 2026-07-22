@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { formatEther, formatUnits, parseUnits, type Abi } from "viem";
+import { formatEther, parseUnits, type Abi } from "viem";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { wagmiConfig } from "@/lib/wagmi";
 import { withdrawTraderBalanceApi } from "@/lib/api/trader-dashboard-api";
+import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
 import { CONTRACTS } from "@/lib/web3/constants/contracts";
 import vault from "@/lib/web3/abi/vault-abi.json";
 import { addNotification } from "@/lib/notifications";
@@ -22,6 +23,7 @@ export function WithdrawUSDC({ onSuccess }: { onSuccess?: () => void }) {
   const { address, isConnected, chain } = useAccount();
   const [amount, setAmount] = React.useState("");
   const [step, setStep] = React.useState<"method" | "amount">("method");
+  const [withdrawableBalance, setWithdrawableBalance] = React.useState(0);
   const { writeContractAsync, isPending } = useWriteContract();
   const amountNumber = Number(amount);
   const ethReturn =
@@ -29,7 +31,7 @@ export function WithdrawUSDC({ onSuccess }: { onSuccess?: () => void }) {
       ? amountNumber / DEMO_ETH_USDC_PRICE
       : 0;
 
-  const { data: availableBalance, refetch: refetchAvailableBalance } =
+  const { refetch: refetchAvailableBalance } =
     useReadContract({
       address: CONTRACTS.vault,
       abi: vaultAbi,
@@ -39,6 +41,23 @@ export function WithdrawUSDC({ onSuccess }: { onSuccess?: () => void }) {
         enabled: Boolean(address),
       },
     });
+
+  const loadWithdrawableBalance = React.useCallback(async () => {
+    if (!address) {
+      setWithdrawableBalance(0);
+      return;
+    }
+    try {
+      const dashboard = await getTraderDashboardApi(address);
+      setWithdrawableBalance(Number(dashboard.stats.freeCollateral || 0));
+    } catch {
+      setWithdrawableBalance(0);
+    }
+  }, [address]);
+
+  React.useEffect(() => {
+    loadWithdrawableBalance();
+  }, [loadWithdrawableBalance]);
 
   const handleWithdraw = async () => {
     if (!isConnected || !address) {
@@ -53,6 +72,13 @@ export function WithdrawUSDC({ onSuccess }: { onSuccess?: () => void }) {
 
     if (!amount || Number(amount) <= 0) {
       toast.error("Enter valid amount");
+      return;
+    }
+
+    if (Number(amount) > withdrawableBalance) {
+      toast.error(
+        `Only ${withdrawableBalance.toFixed(2)} USDC is available to withdraw from Manual Wallet`,
+      );
       return;
     }
 
@@ -87,6 +113,7 @@ export function WithdrawUSDC({ onSuccess }: { onSuccess?: () => void }) {
       onSuccess?.();
 
       await refetchAvailableBalance();
+      await loadWithdrawableBalance();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Withdraw failed");
     }
@@ -178,8 +205,9 @@ export function WithdrawUSDC({ onSuccess }: { onSuccess?: () => void }) {
           2
         </div>
         <div className="space-y-3">
-          <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-            Amount
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+            <span>Amount</span>
+            <span>Available ${withdrawableBalance.toFixed(2)} USDC</span>
           </div>
           <div className="flex min-h-14 border border-border bg-background focus-within:border-accent">
             <Input
@@ -193,6 +221,14 @@ export function WithdrawUSDC({ onSuccess }: { onSuccess?: () => void }) {
               <Coins className="h-4 w-4 text-accent" />
               USDC
             </div>
+            <button
+              type="button"
+              onClick={() => setAmount(withdrawableBalance.toFixed(2))}
+              disabled={withdrawableBalance <= 0}
+              className="border-l border-border px-3 font-mono text-[10px] text-accent disabled:text-muted-foreground"
+            >
+              MAX
+            </button>
           </div>
           <div className="text-xs text-muted-foreground">
             Estimated wallet credit:{" "}
@@ -223,9 +259,9 @@ export function WithdrawUSDC({ onSuccess }: { onSuccess?: () => void }) {
             </span>
           </div>
           <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Available Balance</span>
+            <span className="text-muted-foreground">Manual Withdrawable</span>
             <span className="font-mono text-right">
-              {availableBalance ? formatUnits(availableBalance as bigint, 6) : "0"} USDC
+              {withdrawableBalance.toFixed(2)} USDC
             </span>
           </div>
         </div>

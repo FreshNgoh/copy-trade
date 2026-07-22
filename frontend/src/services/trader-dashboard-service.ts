@@ -261,6 +261,21 @@ export async function withdrawTraderWalletBalance({
     throw new Error("Withdraw amount must be greater than 0");
   }
 
+  const [portfolio, activeManualMargin] = await Promise.all([
+    traderDashboardRepository.ensurePortfolio(traderWalletAddress),
+    positionRepository.getOpenManualMargin({ traderWalletAddress }),
+  ]);
+  const withdrawableBalance = Math.max(
+    toNumber(portfolio.wallet_balance) - activeManualMargin,
+    0,
+  );
+
+  if (amount > withdrawableBalance) {
+    throw new Error(
+      `Only ${withdrawableBalance.toFixed(2)} USDC is available to withdraw from Manual Wallet.`,
+    );
+  }
+
   return traderDashboardRepository.subtractWalletBalance({
     traderWalletAddress,
     amount,

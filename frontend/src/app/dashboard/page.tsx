@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
 import { WalletPerformanceChart } from "@/components/dashboard/wallet-performance-chart";
+import { BINANCE_TESTNET_BASE, SYMBOL_MAP } from "@/lib/trading/binance";
 
 const emptyDashboard: TraderDashboard = {
   trader_wallet_address: "",
@@ -115,8 +116,17 @@ function getPositionSourceLabel(position: TraderDashboardPosition) {
   return "Manual";
 }
 
-function getPositionPnl(position: TraderDashboardPosition) {
-  return Number(position.Pnl ?? 0);
+function getPositionPnl(
+  position: TraderDashboardPosition,
+  markPrices: Record<string, number>,
+) {
+  const markPrice = Number(markPrices[position.symbol] || 0);
+  if (markPrice <= 0) return Number(position.Pnl ?? 0);
+  const entryPrice = Number(position.entry_price);
+  const quantity = Number(position.quantity);
+  return position.direction === "LONG"
+    ? (markPrice - entryPrice) * quantity
+    : (entryPrice - markPrice) * quantity;
 }
 
 function getActivityTone(activity: TraderDashboardActivity) {
@@ -132,6 +142,9 @@ export default function DashboardPage() {
   const [dashboard, setDashboard] =
     React.useState<TraderDashboard>(emptyDashboard);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [markPrices, setMarkPrices] = React.useState<Record<string, number>>(
+    {},
+  );
 
   const loadDashboard = React.useCallback(async () => {
     if (!address) {
@@ -158,6 +171,46 @@ export default function DashboardPage() {
   React.useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
+
+  const activeSymbols = React.useMemo(
+    () => [
+      ...new Set(dashboard.activePositions.map((position) => position.symbol)),
+    ],
+    [dashboard.activePositions],
+  );
+
+  React.useEffect(() => {
+    if (!activeSymbols.length) {
+      setMarkPrices({});
+      return;
+    }
+    let cancelled = false;
+    const loadMarkPrices = async () => {
+      const prices = await Promise.all(
+        activeSymbols.map(async (symbol) => {
+          const ticker = SYMBOL_MAP[symbol];
+          if (!ticker) return [symbol, 0] as const;
+          try {
+            const response = await fetch(
+              `${BINANCE_TESTNET_BASE}/fapi/v1/ticker/price?symbol=${ticker}`,
+            );
+            if (!response.ok) return [symbol, 0] as const;
+            const data = await response.json();
+            return [symbol, Number(data.price || 0)] as const;
+          } catch {
+            return [symbol, 0] as const;
+          }
+        }),
+      );
+      if (!cancelled) setMarkPrices(Object.fromEntries(prices));
+    };
+    loadMarkPrices();
+    const interval = window.setInterval(loadMarkPrices, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeSymbols]);
 
   const stats = dashboard.stats;
   return (
@@ -236,7 +289,7 @@ export default function DashboardPage() {
           {(
             [
               {
-                label: "Total Wallet Value",
+                label: "EST. Total Value",
                 value: formatUsd(stats.totalPortfolioValue),
                 mono: true,
               },
@@ -251,7 +304,7 @@ export default function DashboardPage() {
                 mono: true,
               },
               {
-                label: "Realized PnL",
+                label: "Life Time PnL",
                 value: `${stats.realizedPnl >= 0 ? "+" : ""}${formatUsd(stats.realizedPnl)}`,
                 mono: true,
                 accent: stats.realizedPnl >= 0 ? "text-success" : "text-danger",
@@ -358,13 +411,13 @@ export default function DashboardPage() {
                       <td
                         className={cn(
                           "px-4 py-3 text-right font-mono text-sm",
-                          getPositionPnl(p) >= 0
+                          getPositionPnl(p, markPrices) >= 0
                             ? "text-success"
                             : "text-danger",
                         )}
                       >
-                        {getPositionPnl(p) >= 0 ? "+" : ""}
-                        {formatUsd(getPositionPnl(p))}
+                        {getPositionPnl(p, markPrices) >= 0 ? "+" : ""}
+                        {formatUsd(getPositionPnl(p, markPrices))}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
                         {getPositionSourceLabel(p)}

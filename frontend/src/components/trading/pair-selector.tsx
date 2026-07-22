@@ -69,9 +69,10 @@ export function PairSelector({ pairs, activePair, setActivePair }) {
                   <div className="text-right">
                     <div className="font-mono text-sm text-white">
                       $
-                      {p.price < 1
-                        ? p.price.toFixed(6)
-                        : p.price.toLocaleString()}
+                      {p.price.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </div>
 
                     <div

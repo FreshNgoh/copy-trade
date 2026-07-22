@@ -332,9 +332,10 @@ export default function TradePage() {
               )}
             >
               $
-              {activePair.price < 1
-                ? activePair.price.toFixed(6)
-                : activePair.price.toLocaleString()}
+              {activePair.price.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </div>
           </div>
           <div>

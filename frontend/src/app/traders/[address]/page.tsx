@@ -14,7 +14,14 @@ import {
 } from "lucide-react";
 import { CopySettingsModal } from "@/components/trader/copy-settings-modal";
 import { WalletAvatar } from "@/components/wallet/wallet-avatar";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 import { toast } from "sonner";
 import {
   formatMasterRoi,
@@ -36,7 +43,9 @@ const notAvailable = "N/A";
 
 export default function TraderProfilePage() {
   const params = useParams<{ address?: string | string[] }>();
-  const address = Array.isArray(params.address) ? params.address[0] : params.address;
+  const address = Array.isArray(params.address)
+    ? params.address[0]
+    : params.address;
   const [copyOpen, setCopyOpen] = React.useState(false);
   const {
     profile,
@@ -46,16 +55,27 @@ export default function TraderProfilePage() {
     missingMasterRegistryAddress,
   } = useOnChainTraderProfile(address);
 
-  const traderAddress = profile?.address ?? (!invalidAddress ? (address as `0x${string}` | undefined) : undefined);
-  const displayName = traderAddress ? shortAddress(traderAddress) : notAvailable;
+  const traderAddress =
+    profile?.address ??
+    (!invalidAddress ? (address as `0x${string}` | undefined) : undefined);
+  const displayName = traderAddress
+    ? shortAddress(traderAddress)
+    : notAvailable;
   const verified = profile?.verified === true;
-  const totalPnlPositive = profile?.totalPnl === null || profile?.totalPnl === undefined || profile.totalPnl >= 0;
+  const totalPnlPositive =
+    profile?.totalPnl === null ||
+    profile?.totalPnl === undefined ||
+    profile.totalPnl >= 0;
   const verificationRoi = profile?.verificationRoi ?? null;
   const verificationVolume = profile?.verificationTradingVolume ?? null;
-  const displayedRoi = verificationRoi !== null ? formatMasterRoi(verificationRoi) : formatPercent(profile?.averageRoi ?? null);
-  const displayedVolume = verificationVolume !== null
-    ? formatMasterTradingVolume(verificationVolume)
-    : formatUsd(profile?.tradingVolume ?? null);
+  const displayedRoi =
+    verificationRoi !== null
+      ? formatMasterRoi(verificationRoi)
+      : formatPercent(profile?.averageRoi ?? null);
+  const displayedVolume =
+    verificationVolume !== null
+      ? formatMasterTradingVolume(verificationVolume)
+      : formatUsd(profile?.tradingVolume ?? null);
 
   const stats = [
     { l: "30D ROI", v: notAvailable },
@@ -67,34 +87,45 @@ export default function TraderProfilePage() {
     { l: "Win Rate", v: formatUnsignedPercent(profile?.winRate ?? null) },
     { l: "AUM", v: notAvailable },
     { l: "Followers", v: notAvailable },
-    { l: "Total Trades", v: profile ? profile.totalTrades.toLocaleString() : notAvailable },
+    {
+      l: "Total Trades",
+      v: profile ? profile.totalTrades.toLocaleString() : notAvailable,
+    },
     { l: "Max Drawdown", v: notAvailable },
     { l: "Risk Score", v: notAvailable },
     {
       l: "Total PnL",
       v: formatUsd(profile?.totalPnl ?? null),
-      c: profile?.totalPnl === null || profile?.totalPnl === undefined
-        ? undefined
-        : profile.totalPnl >= 0
-          ? "text-success"
-          : "text-danger",
+      c:
+        profile?.totalPnl === null || profile?.totalPnl === undefined
+          ? undefined
+          : profile.totalPnl >= 0
+            ? "text-success"
+            : "text-danger",
     },
     { l: "Avg Hold", v: notAvailable },
     { l: "Trading Volume", v: displayedVolume },
     {
       l: "Verified At",
-      v: profile?.verifiedAt ? formatTimestamp(profile.verifiedAt) : notAvailable,
+      v: profile?.verifiedAt
+        ? formatTimestamp(profile.verifiedAt)
+        : notAvailable,
     },
   ];
 
   return (
-    <div data-testid="trader-profile-page" className="bg-background min-h-screen">
+    <div
+      data-testid="trader-profile-page"
+      className="bg-background min-h-screen"
+    >
       <div className="max-w-[1600px] mx-auto px-6 py-8">
         <div className="bg-surface border border-border p-6 mb-6">
           <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
             <div className="flex items-center gap-5">
               <WalletAvatar
-                address={traderAddress ?? "0x0000000000000000000000000000000000000000"}
+                address={
+                  traderAddress ?? "0x0000000000000000000000000000000000000000"
+                }
                 size={80}
                 className="relative flex-shrink-0 overflow-hidden border border-border bg-background"
               />
@@ -108,7 +139,11 @@ export default function TraderProfilePage() {
                   </h1>
                   {verified && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider border border-accent text-accent bg-accent/10 px-2 py-1">
-                      <Shield className="w-3 h-3" fill="#00E5FF" stroke="#000" />
+                      <Shield
+                        className="w-3 h-3"
+                        fill="#00E5FF"
+                        stroke="#000"
+                      />
                       Verified
                     </span>
                   )}
@@ -126,11 +161,14 @@ export default function TraderProfilePage() {
                   disabled={!traderAddress}
                   className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {traderAddress ? `${traderAddress.slice(0, 8)}...${traderAddress.slice(-6)}` : notAvailable}
+                  {traderAddress
+                    ? `${traderAddress.slice(0, 8)}...${traderAddress.slice(-6)}`
+                    : notAvailable}
                   <Copy className="w-3 h-3" />
                 </button>
                 <p className="text-sm text-muted-foreground mt-3 max-w-2xl leading-relaxed">
-                  On-chain verified master trader profile. Fields not stored in the smart contracts are shown as {notAvailable}.
+                  On-chain verified master trader profile. Fields not stored in
+                  the smart contracts are shown as {notAvailable}.
                 </p>
                 <div className="flex flex-wrap gap-3 mt-3">
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -177,7 +215,8 @@ export default function TraderProfilePage() {
 
         {missingMasterRegistryAddress && (
           <div className="mb-6 border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-warning">
-            Missing NEXT_PUBLIC_MASTER_REGISTRY_CONTRACT_ADDRESS. Verification fields will show {notAvailable}.
+            Missing NEXT_PUBLIC_MASTER_REGISTRY_CONTRACT_ADDRESS. Verification
+            fields will show {notAvailable}.
           </div>
         )}
 
@@ -190,7 +229,9 @@ export default function TraderProfilePage() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-px bg-border mb-6">
           {stats.map((s) => (
             <div key={s.l} className="bg-surface p-4">
-              <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">{s.l}</div>
+              <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">
+                {s.l}
+              </div>
               <div className={cn("font-mono text-base", s.c)}>{s.v}</div>
             </div>
           ))}
@@ -202,7 +243,12 @@ export default function TraderProfilePage() {
               <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
                 Cumulative PnL
               </span>
-              <span className={cn("font-mono text-lg", totalPnlPositive ? "text-success" : "text-danger")}>
+              <span
+                className={cn(
+                  "font-mono text-lg",
+                  totalPnlPositive ? "text-success" : "text-danger",
+                )}
+              >
                 {formatUsd(profile?.totalPnl ?? null)}
               </span>
             </div>
@@ -212,8 +258,16 @@ export default function TraderProfilePage() {
                   <AreaChart data={profile.cumulativePnlSeries}>
                     <defs>
                       <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#00E5FF" stopOpacity={0.4} />
-                        <stop offset="100%" stopColor="#00E5FF" stopOpacity={0} />
+                        <stop
+                          offset="0%"
+                          stopColor="#00E5FF"
+                          stopOpacity={0.4}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#00E5FF"
+                          stopOpacity={0}
+                        />
                       </linearGradient>
                     </defs>
                     <XAxis
@@ -221,7 +275,12 @@ export default function TraderProfilePage() {
                       stroke="#52525B"
                       fontSize={10}
                       tick={{ fill: "#A1A1AA", fontFamily: "JetBrains Mono" }}
-                      tickFormatter={(t) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                      tickFormatter={(t) =>
+                        new Date(t).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })
+                      }
                     />
                     <YAxis
                       stroke="#52525B"
@@ -237,7 +296,9 @@ export default function TraderProfilePage() {
                         fontFamily: "JetBrains Mono",
                         fontSize: 11,
                       }}
-                      labelFormatter={(t) => new Date(Number(t)).toLocaleDateString()}
+                      labelFormatter={(t) =>
+                        new Date(Number(t)).toLocaleDateString()
+                      }
                       formatter={(v: number) => [formatUsd(v), "PnL"]}
                     />
                     <Area
@@ -266,33 +327,49 @@ export default function TraderProfilePage() {
             <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
               {profile && profile.trades.length > 0 ? (
                 profile.trades.slice(0, 8).map((trade) => (
-                  <div key={trade.tradeId.toString()} className="p-3 hover:bg-surface-hover">
+                  <div
+                    key={trade.tradeId.toString()}
+                    className="p-3 hover:bg-surface-hover"
+                  >
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs">{trade.symbol || notAvailable}</span>
+                        <span className="font-mono text-xs">
+                          {trade.symbol || notAvailable}
+                        </span>
                         <span
                           className={cn(
                             "text-[9px] font-mono uppercase px-1 py-0.5 border",
-                            trade.side === "LONG" ? "border-success text-success" : "border-danger text-danger"
+                            trade.side === "LONG"
+                              ? "border-success text-success"
+                              : "border-danger text-danger",
                           )}
                         >
                           {trade.side}
                         </span>
                       </div>
-                      <span className={cn("font-mono text-xs", trade.pnl >= 0n ? "text-success" : "text-danger")}>
+                      <span
+                        className={cn(
+                          "font-mono text-xs",
+                          trade.pnl >= 0n ? "text-success" : "text-danger",
+                        )}
+                      >
                         {formatPnl(trade.pnl, trade.pnlDecimals)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
                       <span>{formatTimestamp(trade.closedTime)}</span>
-                      <span className="text-accent">ID {trade.tradeId.toString()}</span>
+                      <span className="text-accent">
+                        ID {trade.tradeId.toString()}
+                      </span>
                     </div>
                   </div>
                 ))
               ) : (
                 <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
                   <RefreshCcw className="h-4 w-4" />
-                  {isLoading ? "Loading trades..." : "No on-chain trades found."}
+                  {isLoading
+                    ? "Loading trades..."
+                    : "No on-chain trades found."}
                 </div>
               )}
             </div>
@@ -309,12 +386,12 @@ export default function TraderProfilePage() {
             <table className="w-full min-w-[1040px]">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground border-b border-border">
-                  <th className="text-left px-4 py-2.5">Time</th>
-                  <th className="text-left px-4 py-2.5">Pair</th>
-                  <th className="text-left px-4 py-2.5">Side</th>
-                  <th className="text-right px-4 py-2.5">Entry</th>
-                  <th className="text-right px-4 py-2.5">Exit</th>
-                  <th className="text-right px-4 py-2.5">Size</th>
+                  <th className="text-left px-4 py-2.5">Closed Time</th>
+                  <th className="text-left px-4 py-2.5">Symbol</th>
+                  <th className="text-left px-4 py-2.5">Direction</th>
+                  <th className="text-right px-4 py-2.5">Entry Price</th>
+                  <th className="text-right px-4 py-2.5">Closing Price</th>
+                  <th className="text-right px-4 py-2.5">Quantity</th>
                   <th className="text-right px-4 py-2.5">PnL</th>
                   <th className="text-right px-4 py-2.5">ROI</th>
                   <th className="text-right px-4 py-2.5">Tx</th>
@@ -323,16 +400,23 @@ export default function TraderProfilePage() {
               <tbody>
                 {profile && profile.trades.length > 0 ? (
                   profile.trades.map((trade) => (
-                    <tr key={trade.tradeId.toString()} className="border-b border-border hover:bg-surface-hover">
+                    <tr
+                      key={trade.tradeId.toString()}
+                      className="border-b border-border hover:bg-surface-hover"
+                    >
                       <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
                         {formatTimestamp(trade.closedTime)}
                       </td>
-                      <td className="px-4 py-2.5 font-mono text-sm">{trade.symbol || notAvailable}</td>
+                      <td className="px-4 py-2.5 font-mono text-sm">
+                        {trade.symbol || notAvailable}
+                      </td>
                       <td className="px-4 py-2.5">
                         <span
                           className={cn(
                             "text-[10px] font-mono uppercase px-1.5 py-0.5 border",
-                            trade.side === "LONG" ? "border-success text-success" : "border-danger text-danger"
+                            trade.side === "LONG"
+                              ? "border-success text-success"
+                              : "border-danger text-danger",
                           )}
                         >
                           {trade.side}
@@ -345,12 +429,26 @@ export default function TraderProfilePage() {
                         {formatPrice(trade.closingPrice, trade.priceDecimals)}
                       </td>
                       <td className="px-4 py-2.5 text-right font-mono text-sm">
-                        {formatQuantity(trade.quantity, trade.quantityDecimals, trade.symbol)}
+                        {formatQuantity(
+                          trade.quantity,
+                          trade.quantityDecimals,
+                          trade.symbol,
+                        )}
                       </td>
-                      <td className={cn("px-4 py-2.5 text-right font-mono text-sm", trade.pnl >= 0n ? "text-success" : "text-danger")}>
+                      <td
+                        className={cn(
+                          "px-4 py-2.5 text-right font-mono text-sm",
+                          trade.pnl >= 0n ? "text-success" : "text-danger",
+                        )}
+                      >
                         {formatPnl(trade.pnl, trade.pnlDecimals)}
                       </td>
-                      <td className={cn("px-4 py-2.5 text-right font-mono text-sm", trade.roi >= 0n ? "text-success" : "text-danger")}>
+                      <td
+                        className={cn(
+                          "px-4 py-2.5 text-right font-mono text-sm",
+                          trade.roi >= 0n ? "text-success" : "text-danger",
+                        )}
+                      >
                         {formatRoi(trade.roi, trade.roiDecimals)}
                       </td>
                       <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
@@ -360,8 +458,13 @@ export default function TraderProfilePage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center font-mono text-sm text-muted-foreground">
-                      {isLoading ? "Loading on-chain trade history..." : "No on-chain trade history found."}
+                    <td
+                      colSpan={9}
+                      className="px-4 py-8 text-center font-mono text-sm text-muted-foreground"
+                    >
+                      {isLoading
+                        ? "Loading on-chain trade history..."
+                        : "No on-chain trade history found."}
                     </td>
                   </tr>
                 )}

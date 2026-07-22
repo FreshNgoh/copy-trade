@@ -25,7 +25,7 @@ export function TradePanel({
   const { address, isConnected } = useAccount();
   const [direction, setDirection] = React.useState<"BUY" | "SELL">("BUY");
   const [type, setType] = React.useState<"MARKET" | "LIMIT">("MARKET");
-  const [price, setLimitPrice] = React.useState(midPrice.toString());
+  const [price, setLimitPrice] = React.useState(midPrice.toFixed(2));
   const [margin, setMargin] = React.useState("");
   const [quantityInput, setQuantityInputValue] = React.useState("");
   const [leverage, setLeverage] = React.useState([5]);
@@ -224,7 +224,7 @@ export function TradePanel({
       await loadFreeCollateral();
 
       // Reset input
-      setLimitPrice(midPrice.toString());
+      setLimitPrice(midPrice.toFixed(2));
       setMargin("");
       setQuantityInputValue("");
       setStopLoss("");
@@ -240,7 +240,7 @@ export function TradePanel({
 
   // reset the limit price to mid price when pair changes
   React.useEffect(() => {
-    setLimitPrice(midPrice.toString());
+    setLimitPrice(midPrice.toFixed(2));
   }, [pair]);
 
   return (
@@ -286,7 +286,7 @@ export function TradePanel({
               onClick={() => {
                 setType(t);
 
-                if (t === "LIMIT") setLimitPrice(midPrice.toString());
+                if (t === "LIMIT") setLimitPrice(midPrice.toFixed(2));
               }}
               className={cn(
                 "flex-1 py-1.5 text-[11px] font-mono uppercase tracking-wider transition-colors",
