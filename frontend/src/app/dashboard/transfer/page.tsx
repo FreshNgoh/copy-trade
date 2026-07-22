@@ -60,7 +60,7 @@ export default function WalletTransferPage() {
       if (direction === "manual_to_copy") await transferManualWalletToCopyApi(input);
       else await transferCopyWalletToManualApi(input);
       toast.success(`Transferred $${value.toFixed(2)} to ${to}`);
-      addNotification({
+      addNotification(address, {
         type: "transfer",
         title: "Wallet transfer completed",
         message: `${value.toFixed(2)} USDC moved from ${from} to ${to}.`,

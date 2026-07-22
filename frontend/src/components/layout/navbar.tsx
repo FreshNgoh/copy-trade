@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount } from "wagmi";
 import { cn } from "@/lib/utils";
 import { Activity, Bell, Search } from "lucide-react";
 import * as React from "react";
@@ -23,12 +24,13 @@ const NAV = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const { address } = useAccount();
   const [notifications, setNotifications] = React.useState<AppNotification[]>(
     [],
   );
 
   React.useEffect(() => {
-    const refresh = () => setNotifications(getNotifications());
+    const refresh = () => setNotifications(getNotifications(address));
     refresh();
     window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, refresh);
     window.addEventListener("storage", refresh);
@@ -36,7 +38,7 @@ export function Navbar() {
       window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, refresh);
       window.removeEventListener("storage", refresh);
     };
-  }, []);
+  }, [address]);
 
   const unread = notifications.filter((item) => !item.read).length;
 

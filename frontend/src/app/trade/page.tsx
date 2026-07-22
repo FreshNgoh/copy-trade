@@ -161,7 +161,7 @@ export default function TradePage() {
   }, [midPrice]);
 
   React.useEffect(() => {
-    if (!activePositions.length || liquidationClosingRef.current) return;
+    if (!address || !activePositions.length || liquidationClosingRef.current) return;
 
     const pricedPositions = activePositions
       .map((position) => {
@@ -181,7 +181,7 @@ export default function TradePage() {
     pricedPositions.forEach(({ position, progress }) => {
       if (progress >= 0.9 && progress < 1 && !liquidationWarningsRef.current.has(position.position_id)) {
         liquidationWarningsRef.current.add(position.position_id);
-        addNotification({
+        addNotification(address, {
           type: "liquidation_warning",
           title: "Liquidation risk above 90%",
           message: `${position.symbol} is close to its liquidation price of $${Number(position.liquidation_price).toFixed(2)}.`,
@@ -217,7 +217,7 @@ export default function TradePage() {
         });
         closedCount += 1;
       }
-      addNotification({
+      addNotification(address, {
         type: "liquidation",
         title: "Positions liquidated",
         message: `${closedCount} open position${closedCount === 1 ? " was" : "s were"} force-closed after the liquidation threshold was reached.`,
@@ -233,7 +233,7 @@ export default function TradePage() {
       .finally(() => {
         liquidationClosingRef.current = false;
       });
-  }, [activePositions, loadPositions, loadTradeHistory, pairs]);
+  }, [activePositions, address, loadPositions, loadTradeHistory, pairs]);
 
   React.useEffect(() => {
     bookTickerRef.current = {

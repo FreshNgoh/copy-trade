@@ -94,7 +94,7 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
       });
 
       toast.success("Deposit successful");
-      addNotification({
+      addNotification(address, {
         type: "deposit",
         title: "Deposit completed",
         message: `${Number(amount).toFixed(2)} USDC was added to your Manual Wallet.`,

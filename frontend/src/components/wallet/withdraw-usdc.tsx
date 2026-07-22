@@ -102,7 +102,7 @@ export function WithdrawUSDC({ onSuccess }: { onSuccess?: () => void }) {
       });
 
       toast.success("Withdraw successful");
-      addNotification({
+      addNotification(address, {
         type: "withdraw",
         title: "Withdrawal completed",
         message: `${Number(amount).toFixed(2)} USDC was withdrawn from your Manual Wallet.`,

@@ -1,19 +1,21 @@
 "use client";
 
 import * as React from "react";
+import { useAccount } from "wagmi";
 import { AlertTriangle, ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Bell, ShieldAlert } from "lucide-react";
 import { getNotifications, markAllNotificationsRead, NOTIFICATIONS_UPDATED_EVENT, type AppNotification } from "@/lib/notifications";
 
 export default function NotificationsPage() {
+  const { address } = useAccount();
   const [notifications, setNotifications] = React.useState<AppNotification[]>([]);
 
   React.useEffect(() => {
-    const refresh = () => setNotifications(getNotifications());
+    const refresh = () => setNotifications(getNotifications(address));
     refresh();
-    markAllNotificationsRead();
+    if (address) markAllNotificationsRead(address);
     window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, refresh);
     return () => window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, refresh);
-  }, []);
+  }, [address]);
 
   return <main className="min-h-screen bg-background"><div className="mx-auto max-w-4xl px-6 py-10">
     <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground">▎ Account activity</div>
