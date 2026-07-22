@@ -43,8 +43,10 @@ export type OnChainTraderProfile = {
   totalTrades: number;
   totalPnl: number | null;
   averageRoi: number | null;
+  thirtyDayRoi: number | null;
   winRate: number | null;
   tradingVolume: number | null;
+  maxDrawdown: number | null;
   cumulativePnlSeries: { t: number; pnl: number }[];
 };
 
@@ -140,17 +142,30 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
           ? sumSignedScaledValues(sortedRecords.map((record) => [record.roi, record.roiDecimals])) /
             sortedRecords.length
           : null;
+        const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
+        const recentRecords = sortedRecords.filter(
+          (record) => Number(record.closedTime) >= thirtyDaysAgo,
+        );
+        const thirtyDayRoi = recentRecords.length
+          ? sumSignedScaledValues(
+              recentRecords.map((record) => [record.roi, record.roiDecimals]),
+            ) / recentRecords.length
+          : null;
         const wins = sortedRecords.filter((record) => record.pnl > 0n).length;
         const tradingVolume = sortedRecords.reduce<number | null>((total, record) => {
           if (total === null || record.volumeUsd === null) return null;
           return total + record.volumeUsd;
         }, 0);
         let cumulativePnl = 0;
+        let peakPnl = 0;
+        let maxDrawdown = 0;
         const cumulativePnlSeries = sortedRecords
           .slice()
           .sort((a, b) => Number(a.closedTime - b.closedTime))
           .map((record) => {
             cumulativePnl += signedScaledToNumber(record.pnl, record.pnlDecimals);
+            peakPnl = Math.max(peakPnl, cumulativePnl);
+            maxDrawdown = Math.max(maxDrawdown, peakPnl - cumulativePnl);
             return {
               t: Number(record.closedTime) * 1000,
               pnl: Number(cumulativePnl.toFixed(2)),
@@ -172,8 +187,10 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
             totalTrades: sortedRecords.length,
             totalPnl,
             averageRoi,
+            thirtyDayRoi,
             winRate: sortedRecords.length ? (wins / sortedRecords.length) * 100 : null,
             tradingVolume,
+            maxDrawdown,
             cumulativePnlSeries,
           });
         }

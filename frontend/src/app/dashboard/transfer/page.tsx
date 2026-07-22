@@ -43,7 +43,10 @@ export default function WalletTransferPage() {
     ? dashboard?.stats.manualMarginUsed ?? 0
     : dashboard?.stats.copyMarginUsed ?? 0;
   const sourcePositionCount = dashboard?.activePositions.filter((position) => {
-    const copyPosition = position.trade_source === "COPY" || Boolean(position.copied_from_master);
+    const copyPosition =
+      position.trade_source === "MASTER_COPY" ||
+      position.trade_source === "COPY" ||
+      Boolean(position.copied_from_master);
     return direction === "manual_to_copy" ? !copyPosition : copyPosition;
   }).length ?? 0;
   const from = direction === "manual_to_copy" ? "Manual Wallet" : "Copy Wallet";

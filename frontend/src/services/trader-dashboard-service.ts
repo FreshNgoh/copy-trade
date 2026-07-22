@@ -27,7 +27,11 @@ function getPositionMargin(position: TraderDashboardPosition) {
 }
 
 function isCopyPosition(position: TraderDashboardPosition) {
-  return position.trade_source === "COPY" || Boolean(position.copied_from_master);
+  return (
+    position.trade_source === "MASTER_COPY" ||
+    position.trade_source === "COPY" ||
+    Boolean(position.copied_from_master)
+  );
 }
 
 function getSettledPnl(position: TraderDashboardPosition) {

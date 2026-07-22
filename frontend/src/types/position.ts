@@ -10,7 +10,7 @@ export interface Position {
   take_profit: number | null;
   liquidation_price?: number;
   status: "OPEN" | "CLOSED" | "CANCELLED" | "LIQUIDATED";
-  trade_source?: "OWN" | "COPY";
+  trade_source?: "OWN" | "MASTER_COPY" | "COPY";
   copied_from_master?: string | null;
   copy_trade_position_id?: string | null;
   gross_pnl?: number | null;
@@ -30,7 +30,8 @@ export interface CreatePositionDTO {
   liquidation_price?: number;
   stop_loss: number | null;
   take_profit: number | null;
-  trade_source?: "OWN" | "COPY";
+  trade_source?: "OWN" | "MASTER_COPY" | "COPY";
+  execution_mode?: "MANUAL" | "COPY";
   copied_from_master?: string | null;
   copy_trade_position_id?: string | null;
 }
@@ -45,7 +46,7 @@ export interface ClosedPosition {
   leverage: number;
   Pnl: number;
   Roi: number;
-  trade_source?: "OWN" | "COPY";
+  trade_source?: "OWN" | "MASTER_COPY" | "COPY";
   copied_from_master?: string | null;
   copy_trade_position_id?: string | null;
   gross_pnl?: number | null;

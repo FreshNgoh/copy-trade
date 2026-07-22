@@ -9,6 +9,7 @@ function shortAddress(address?: string | null) {
 }
 
 function getPositionSourceLabel(position: ClosedPosition) {
+  if (position.trade_source === "MASTER_COPY") return "Master Copy";
   if (position.trade_source === "COPY" || position.copied_from_master) {
     return `Copied ${shortAddress(position.copied_from_master)}`;
   }

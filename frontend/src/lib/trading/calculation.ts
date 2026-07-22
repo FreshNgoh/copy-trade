@@ -54,7 +54,7 @@ type LiquidationPosition = {
   quantity: number;
   entry_price: number;
   direction: "LONG" | "SHORT";
-  trade_source?: "OWN" | "COPY";
+  trade_source?: "OWN" | "MASTER_COPY" | "COPY";
   copied_from_master?: string | null;
 };
 
@@ -69,7 +69,9 @@ export function calculateWalletLiquidationPrices<T extends LiquidationPosition>(
   maintenanceMarginRate = 0.005,
 ) {
   const isCopy = (position: T) =>
-    position.trade_source === "COPY" || Boolean(position.copied_from_master);
+    position.trade_source === "MASTER_COPY" ||
+    position.trade_source === "COPY" ||
+    Boolean(position.copied_from_master);
   const maintenance = (position: T) =>
     Number(position.quantity) *
     Number(position.entry_price) *

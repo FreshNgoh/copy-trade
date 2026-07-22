@@ -41,16 +41,24 @@ function getPositionInitialMargin(position) {
   return (toNumber(position.entry_price) * toNumber(position.quantity)) / leverage;
 }
 
-async function getFreeCollateral(traderWalletAddress: string) {
+async function getFreeCollateral(
+  traderWalletAddress: string,
+  wallet: "manual" | "copy",
+) {
   const [portfolio, openPositions] = await Promise.all([
     traderDashboardRepository.ensurePortfolio(traderWalletAddress),
     positionRepository.getOpenPositions(traderWalletAddress),
   ]);
-  const walletBalance = toNumber(portfolio.wallet_balance);
-  const manualPositions = openPositions.filter(
-    (position) => !isCopiedPosition(position),
+  const walletBalance = toNumber(
+    wallet === "copy" ? portfolio.copy_wallet_balance : portfolio.wallet_balance,
   );
-  const usedMargin = manualPositions.reduce(
+  if (wallet === "copy" && !portfolio.is_verified_master) {
+    throw new Error("Only verified master traders can open Copy Mode trades");
+  }
+  const walletPositions = openPositions.filter((position) =>
+    wallet === "copy" ? usesCopyWallet(position) : !usesCopyWallet(position),
+  );
+  const usedMargin = walletPositions.reduce(
     (total, position) => total + getPositionInitialMargin(position),
     0,
   );
@@ -172,11 +180,12 @@ export async function assertSufficientFreeCollateral(data: CreatePositionDTO) {
     leverage: Number(data.leverage),
     direction: data.direction,
   });
-  const freeCollateral = await getFreeCollateral(data.trader_wallet_address);
+  const wallet = data.execution_mode === "COPY" ? "copy" : "manual";
+  const freeCollateral = await getFreeCollateral(data.trader_wallet_address, wallet);
 
   if (metrics.initialMargin > freeCollateral) {
     throw new Error(
-      `Insufficient free collateral. Required ${metrics.initialMargin.toFixed(
+      `Insufficient ${wallet === "copy" ? "Copy Wallet" : "Manual Wallet"} collateral. Required ${metrics.initialMargin.toFixed(
         2,
       )} USDC, available ${Math.max(freeCollateral, 0).toFixed(2)} USDC.`,
     );
@@ -203,15 +212,18 @@ export async function openOrIncreasePosition(data: CreatePositionDTO) {
   }
 
   await assertSufficientFreeCollateral(data);
+  const tradeSource = data.execution_mode === "COPY" ? "MASTER_COPY" : "OWN";
   const existingPosition = await positionRepository.getOpenPosition({
     trader_wallet_address: data.trader_wallet_address,
     symbol: data.symbol,
     direction: data.direction,
+    trade_source: tradeSource,
   });
 
   if (!existingPosition) {
     const createdPosition = await positionRepository.createMarketOrder({
       ...data,
+      trade_source: tradeSource,
     });
 
     await syncOpenPositionCount(data.trader_wallet_address);
@@ -240,6 +252,8 @@ export async function openOrIncreasePosition(data: CreatePositionDTO) {
 }
 
 async function syncCopiedFollowers(data: CreatePositionDTO) {
+  if (data.execution_mode !== "COPY") return;
+
   try {
     await copyMasterPositionToFollowers(data);
   } catch (error) {
@@ -295,6 +309,14 @@ async function settleClosedPositionRewards(position) {
     position.gross_pnl = grossPnl;
     position.master_reward = rewards.masterReward;
     position.follower_reward = rewards.followerReward;
+    return;
+  }
+
+  if (usesCopyWallet(position)) {
+    await applyCopyWalletDelta(position.trader_wallet_address, grossPnl);
+    position.gross_pnl = grossPnl;
+    position.master_reward = 0;
+    position.follower_reward = 0;
     return;
   }
 
@@ -371,6 +393,10 @@ async function applyCopyWalletDelta(traderWalletAddress: string, amount: number)
 
 function isCopiedPosition(position) {
   return position.trade_source === "COPY" || Boolean(position.copied_from_master);
+}
+
+function usesCopyWallet(position) {
+  return position.trade_source === "MASTER_COPY" || isCopiedPosition(position);
 }
 
 export async function syncClosedPositionById({

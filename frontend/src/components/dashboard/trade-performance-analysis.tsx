@@ -8,7 +8,11 @@ import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recha
 type View = "all" | "manual" | "copy";
 
 function isCopy(position: TraderDashboardPosition) {
-  return position.trade_source === "COPY" || Boolean(position.copied_from_master);
+  return (
+    position.trade_source === "MASTER_COPY" ||
+    position.trade_source === "COPY" ||
+    Boolean(position.copied_from_master)
+  );
 }
 
 function pnl(position: TraderDashboardPosition) {

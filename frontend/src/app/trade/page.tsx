@@ -18,6 +18,8 @@ import { useAccount } from "wagmi";
 import { addNotification } from "@/lib/notifications";
 import { toast } from "sonner";
 import type { Position } from "@/types/position";
+import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
+import { Switch } from "@/components/ui/switch";
 
 const INITIAL_PAIRS = [
   { pair: "ETH/USDC", price: 0, change: 0, vol: "$0" },
@@ -65,6 +67,8 @@ export default function TradePage() {
   const [activePositions, setActivePositions] = React.useState<Position[]>([]);
   const [closedPositions, setClosedPositions] = React.useState([]);
   const [orderPositions, setOrderPositions] = React.useState([]);
+  const [tradeMode, setTradeMode] = React.useState<"MANUAL" | "COPY">("MANUAL");
+  const [isVerifiedMaster, setIsVerifiedMaster] = React.useState(false);
   const liquidationWarningsRef = React.useRef(new Set<string>());
   const liquidationClosingRef = React.useRef(false);
 
@@ -85,6 +89,33 @@ export default function TradePage() {
   React.useEffect(() => {
     loadPositions();
   }, [loadPositions]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (!address) {
+      setIsVerifiedMaster(false);
+      setTradeMode("MANUAL");
+      return;
+    }
+
+    getTraderDashboardApi(address)
+      .then((dashboard) => {
+        if (cancelled) return;
+        const verified = Boolean(dashboard.portfolio?.is_verified_master);
+        setIsVerifiedMaster(verified);
+        if (!verified) setTradeMode("MANUAL");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsVerifiedMaster(false);
+        setTradeMode("MANUAL");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
 
   React.useEffect(() => {
     const loadPairs = async () => {
@@ -162,10 +193,13 @@ export default function TradePage() {
   }, [midPrice]);
 
   React.useEffect(() => {
-    if (!address || !activePositions.length || liquidationClosingRef.current) return;
+    if (!address || !activePositions.length || liquidationClosingRef.current)
+      return;
 
     const isCopyPosition = (position: Position) =>
-      position.trade_source === "COPY" || Boolean(position.copied_from_master);
+      position.trade_source === "MASTER_COPY" ||
+      position.trade_source === "COPY" ||
+      Boolean(position.copied_from_master);
     const pricedPositions = activePositions
       .map((position) => {
         const market = pairs.find((item) => item.pair === position.symbol);
@@ -173,16 +207,30 @@ export default function TradePage() {
         const entryPrice = Number(position.entry_price);
         const liquidationPrice = Number(position.liquidation_price || 0);
         const liquidationDistance = Math.abs(entryPrice - liquidationPrice);
-        if (markPrice <= 0 || liquidationPrice <= 0 || liquidationDistance <= 0) return null;
-        const adverseMove = position.direction === "LONG"
-          ? entryPrice - markPrice
-          : markPrice - entryPrice;
-        return { position, markPrice, progress: adverseMove / liquidationDistance };
+        if (markPrice <= 0 || liquidationPrice <= 0 || liquidationDistance <= 0)
+          return null;
+        const adverseMove =
+          position.direction === "LONG"
+            ? entryPrice - markPrice
+            : markPrice - entryPrice;
+        return {
+          position,
+          markPrice,
+          progress: adverseMove / liquidationDistance,
+        };
       })
-      .filter(Boolean) as Array<{ position: Position; markPrice: number; progress: number }>;
+      .filter(Boolean) as Array<{
+      position: Position;
+      markPrice: number;
+      progress: number;
+    }>;
 
     pricedPositions.forEach(({ position, progress }) => {
-      if (progress >= 0.9 && progress < 1 && !liquidationWarningsRef.current.has(position.position_id)) {
+      if (
+        progress >= 0.9 &&
+        progress < 1 &&
+        !liquidationWarningsRef.current.has(position.position_id)
+      ) {
         liquidationWarningsRef.current.add(position.position_id);
         addNotification(address, {
           type: "liquidation_warning",
@@ -212,10 +260,11 @@ export default function TradePage() {
         if (closingPrice <= 0) continue;
         const quantity = Number(position.quantity);
         const entryPrice = Number(position.entry_price);
-        const pnl = position.direction === "LONG"
-          ? (closingPrice - entryPrice) * quantity
-          : (entryPrice - closingPrice) * quantity;
-        const margin = entryPrice * quantity / Number(position.leverage || 1);
+        const pnl =
+          position.direction === "LONG"
+            ? (closingPrice - entryPrice) * quantity
+            : (entryPrice - closingPrice) * quantity;
+        const margin = (entryPrice * quantity) / Number(position.leverage || 1);
         const roi = margin > 0 ? (pnl / margin) * 100 : 0;
         await closePositionApi({
           position_id: position.position_id,
@@ -233,13 +282,17 @@ export default function TradePage() {
         title: "Positions liquidated",
         message: `${closedCount} open position${closedCount === 1 ? " was" : "s were"} in the affected wallet ${closedCount === 1 ? "was" : "were"} force-closed after its liquidation threshold was reached.`,
       });
-      toast.error("Liquidation threshold reached. Positions in the affected wallet were closed.");
+      toast.error(
+        "Liquidation threshold reached. Positions in the affected wallet were closed.",
+      );
       await Promise.all([loadPositions(), loadTradeHistory()]);
     };
 
     closeLiquidatedWalletPositions()
       .catch((error) => {
-        toast.error(error instanceof Error ? error.message : "Forced liquidation failed");
+        toast.error(
+          error instanceof Error ? error.message : "Forced liquidation failed",
+        );
       })
       .finally(() => {
         liquidationClosingRef.current = false;
@@ -382,6 +435,24 @@ export default function TradePage() {
             <div className="font-mono text-sm">$184.2M</div>
           </div>
         </div>
+
+        {isVerifiedMaster && (
+          <div className="ml-auto flex items-center gap-3">
+            <div className="text-right">
+              <div className="font-mono text-[10px] uppercase text-muted-foreground">
+                Copy Mode
+              </div>
+            </div>
+            <Switch
+              checked={tradeMode === "COPY"}
+              onCheckedChange={(checked) =>
+                setTradeMode(checked ? "COPY" : "MANUAL")
+              }
+              aria-label="Toggle copy trading mode"
+              className="data-[state=checked]:bg-accent"
+            />
+          </div>
+        )}
       </div>
 
       {/* Grid: Chart | OrderBook | TradePanel */}
@@ -398,6 +469,7 @@ export default function TradePage() {
             midPrice={activePair.price}
             onPositionCreated={loadPositions}
             onOrderCreated={loadLimitOrder}
+            tradeMode={tradeMode}
           />
         </div>
       </div>

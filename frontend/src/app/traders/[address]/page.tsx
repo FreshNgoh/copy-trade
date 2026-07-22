@@ -24,8 +24,6 @@ import {
 } from "recharts";
 import { toast } from "sonner";
 import {
-  formatMasterRoi,
-  formatMasterTradingVolume,
   formatPercent,
   formatUnsignedPercent,
   formatUsd,
@@ -38,6 +36,8 @@ import {
   formatRoi,
   formatTimestamp,
 } from "@/lib/web3/trade-history/format";
+import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
+import type { TraderDashboardPosition } from "@/types/trader-dashboard";
 
 const notAvailable = "N/A";
 
@@ -47,6 +47,11 @@ export default function TraderProfilePage() {
     ? params.address[0]
     : params.address;
   const [copyOpen, setCopyOpen] = React.useState(false);
+  const [followers, setFollowers] = React.useState<number | null>(null);
+  const [tradingCapital, setTradingCapital] = React.useState<number | null>(null);
+  const [masterCopyPositions, setMasterCopyPositions] = React.useState<
+    TraderDashboardPosition[]
+  >([]);
   const {
     profile,
     isLoading,
@@ -66,33 +71,75 @@ export default function TraderProfilePage() {
     profile?.totalPnl === null ||
     profile?.totalPnl === undefined ||
     profile.totalPnl >= 0;
-  const verificationRoi = profile?.verificationRoi ?? null;
-  const verificationVolume = profile?.verificationTradingVolume ?? null;
-  const displayedRoi =
-    verificationRoi !== null
-      ? formatMasterRoi(verificationRoi)
-      : formatPercent(profile?.averageRoi ?? null);
-  const displayedVolume =
-    verificationVolume !== null
-      ? formatMasterTradingVolume(verificationVolume)
-      : formatUsd(profile?.tradingVolume ?? null);
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (!traderAddress) {
+      setFollowers(null);
+      setTradingCapital(null);
+      setMasterCopyPositions([]);
+      return;
+    }
+
+    const loadDashboard = () =>
+      getTraderDashboardApi(traderAddress)
+        .then((dashboard) => {
+        if (!cancelled) {
+          setFollowers(dashboard.stats.followers);
+          setTradingCapital(dashboard.stats.copyWalletBalance);
+          setMasterCopyPositions(
+            dashboard.activePositions.filter(
+              (position) => position.trade_source === "MASTER_COPY",
+            ),
+          );
+        }
+        })
+        .catch(() => {
+        if (!cancelled) {
+          setFollowers(null);
+          setTradingCapital(null);
+          setMasterCopyPositions([]);
+        }
+        });
+
+    loadDashboard();
+    const interval = window.setInterval(loadDashboard, 15_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [traderAddress]);
+
+  const maxDrawdownPercent =
+    tradingCapital !== null &&
+    tradingCapital > 0 &&
+    profile?.maxDrawdown !== null &&
+    profile?.maxDrawdown !== undefined
+      ? (profile.maxDrawdown / tradingCapital) * 100
+      : null;
 
   const stats = [
-    { l: "30D ROI", v: notAvailable },
     {
-      l: "All-Time ROI",
-      v: displayedRoi,
-      c: getSignedClass(displayedRoi),
+      l: "30D ROI",
+      v: formatPercent(profile?.thirtyDayRoi ?? null),
+      c: getSignedClass(formatPercent(profile?.thirtyDayRoi ?? null)),
     },
     { l: "Win Rate", v: formatUnsignedPercent(profile?.winRate ?? null) },
-    { l: "AUM", v: notAvailable },
-    { l: "Followers", v: notAvailable },
+    { l: "AUM", v: formatUsd(tradingCapital) },
+    {
+      l: "Followers",
+      v: followers === null ? notAvailable : followers.toLocaleString(),
+    },
     {
       l: "Total Trades",
       v: profile ? profile.totalTrades.toLocaleString() : notAvailable,
     },
-    { l: "Max Drawdown", v: notAvailable },
-    { l: "Risk Score", v: notAvailable },
+    {
+      l: "Max Drawdown",
+      v: formatUnsignedPercent(maxDrawdownPercent),
+      c: maxDrawdownPercent === null ? undefined : "text-danger",
+    },
     {
       l: "Total PnL",
       v: formatUsd(profile?.totalPnl ?? null),
@@ -103,8 +150,6 @@ export default function TraderProfilePage() {
             ? "text-success"
             : "text-danger",
     },
-    { l: "Avg Hold", v: notAvailable },
-    { l: "Trading Volume", v: displayedVolume },
     {
       l: "Verified At",
       v: profile?.verifiedAt
@@ -226,7 +271,7 @@ export default function TraderProfilePage() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-px bg-border mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border mb-6">
           {stats.map((s) => (
             <div key={s.l} className="bg-surface p-4">
               <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">
@@ -321,55 +366,49 @@ export default function TraderProfilePage() {
           <div className="bg-surface border border-border">
             <div className="px-5 py-3 border-b border-border">
               <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                Recent Activity
+                Master Copy Active Positions
               </span>
             </div>
             <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
-              {profile && profile.trades.length > 0 ? (
-                profile.trades.slice(0, 8).map((trade) => (
+              {masterCopyPositions.length > 0 ? (
+                masterCopyPositions.map((position) => (
                   <div
-                    key={trade.tradeId.toString()}
+                    key={position.position_id}
                     className="p-3 hover:bg-surface-hover"
                   >
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs">
-                          {trade.symbol || notAvailable}
+                          {position.symbol || notAvailable}
                         </span>
                         <span
                           className={cn(
                             "text-[9px] font-mono uppercase px-1 py-0.5 border",
-                            trade.side === "LONG"
+                            position.direction === "LONG"
                               ? "border-success text-success"
                               : "border-danger text-danger",
                           )}
                         >
-                          {trade.side}
+                          {position.direction} {position.leverage}×
                         </span>
                       </div>
-                      <span
-                        className={cn(
-                          "font-mono text-xs",
-                          trade.pnl >= 0n ? "text-success" : "text-danger",
-                        )}
-                      >
-                        {formatPnl(trade.pnl, trade.pnlDecimals)}
+                      <span className="font-mono text-xs text-accent">
+                        {Number(position.quantity).toLocaleString(undefined, {
+                          maximumFractionDigits: 6,
+                        })}{" "}
+                        {position.symbol.split("/")[0]}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
-                      <span>{formatTimestamp(trade.closedTime)}</span>
-                      <span className="text-accent">
-                        ID {trade.tradeId.toString()}
-                      </span>
+                      <span>{new Date(position.created_at).toLocaleString()}</span>
+                      <span>Entry ${Number(position.entry_price).toFixed(2)}</span>
                     </div>
                   </div>
                 ))
               ) : (
                 <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
                   <RefreshCcw className="h-4 w-4" />
-                  {isLoading
-                    ? "Loading trades..."
-                    : "No on-chain trades found."}
+                  No active Master Copy positions.
                 </div>
               )}
             </div>

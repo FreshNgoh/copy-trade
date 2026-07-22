@@ -109,7 +109,11 @@ function getPositionNotional(position: TraderDashboardPosition) {
 }
 
 function getPositionSourceLabel(position: TraderDashboardPosition) {
-  if (position.trade_source === "COPY" || position.copied_from_master) {
+  if (
+    position.trade_source === "MASTER_COPY" ||
+    position.trade_source === "COPY" ||
+    position.copied_from_master
+  ) {
     return `Copied ${shortAddress(position.copied_from_master)}`;
   }
 

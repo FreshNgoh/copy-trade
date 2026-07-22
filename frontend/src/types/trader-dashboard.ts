@@ -14,6 +14,7 @@ export interface TraderDashboardPortfolio {
   copy_wallet_balance: number;
   positions: number;
   followers: number;
+  is_verified_master?: boolean;
 }
 
 export interface TraderDashboardStats {

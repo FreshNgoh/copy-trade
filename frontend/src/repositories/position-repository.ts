@@ -113,7 +113,9 @@ export class PositionRepository {
     return (positions ?? [])
       .filter(
         (position) =>
-          position.trade_source !== "COPY" && !position.copied_from_master,
+          position.trade_source !== "MASTER_COPY" &&
+          position.trade_source !== "COPY" &&
+          !position.copied_from_master,
       )
       .reduce((total, position) => {
       const leverage = Number(position.leverage);
@@ -357,10 +359,12 @@ export class PositionRepository {
     trader_wallet_address,
     symbol,
     direction,
+    trade_source = "OWN",
   }: {
     trader_wallet_address: string;
     symbol: string;
     direction: "LONG" | "SHORT";
+    trade_source?: "OWN" | "MASTER_COPY";
   }) {
     const { data, error } = await supabase
       .from("positions")
@@ -369,7 +373,7 @@ export class PositionRepository {
       .eq("symbol", symbol)
       .eq("direction", direction)
       .eq("status", "OPEN")
-      .eq("trade_source", "OWN")
+      .eq("trade_source", trade_source)
       .maybeSingle();
 
     if (error) throw error;
