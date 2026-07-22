@@ -17,6 +17,7 @@ import { useBinancePrice } from "@/hooks/use-binance-price";
 import { useAccount } from "wagmi";
 import { addNotification } from "@/lib/notifications";
 import { toast } from "sonner";
+import type { Position } from "@/types/position";
 
 const INITIAL_PAIRS = [
   { pair: "ETH/USDC", price: 0, change: 0, vol: "$0" },
@@ -61,7 +62,7 @@ export default function TradePage() {
   const [tab, setTab] = React.useState<"positions" | "orders" | "history">(
     "positions",
   );
-  const [activePositions, setActivePositions] = React.useState([]);
+  const [activePositions, setActivePositions] = React.useState<Position[]>([]);
   const [closedPositions, setClosedPositions] = React.useState([]);
   const [orderPositions, setOrderPositions] = React.useState([]);
   const liquidationWarningsRef = React.useRef(new Set<string>());
@@ -163,6 +164,8 @@ export default function TradePage() {
   React.useEffect(() => {
     if (!address || !activePositions.length || liquidationClosingRef.current) return;
 
+    const isCopyPosition = (position: Position) =>
+      position.trade_source === "COPY" || Boolean(position.copied_from_master);
     const pricedPositions = activePositions
       .map((position) => {
         const market = pairs.find((item) => item.pair === position.symbol);
@@ -176,7 +179,7 @@ export default function TradePage() {
           : markPrice - entryPrice;
         return { position, markPrice, progress: adverseMove / liquidationDistance };
       })
-      .filter(Boolean) as Array<{ position: any; markPrice: number; progress: number }>;
+      .filter(Boolean) as Array<{ position: Position; markPrice: number; progress: number }>;
 
     pricedPositions.forEach(({ position, progress }) => {
       if (progress >= 0.9 && progress < 1 && !liquidationWarningsRef.current.has(position.position_id)) {
@@ -190,12 +193,20 @@ export default function TradePage() {
       }
     });
 
-    if (!pricedPositions.some(({ progress }) => progress >= 1)) return;
+    const liquidatedWallets = new Set(
+      pricedPositions
+        .filter(({ progress }) => progress >= 1)
+        .map(({ position }) => (isCopyPosition(position) ? "copy" : "manual")),
+    );
+    if (!liquidatedWallets.size) return;
     liquidationClosingRef.current = true;
 
-    const closeAllPositions = async () => {
+    const closeLiquidatedWalletPositions = async () => {
       let closedCount = 0;
-      for (const position of activePositions) {
+      const positionsToClose = activePositions.filter((position) =>
+        liquidatedWallets.has(isCopyPosition(position) ? "copy" : "manual"),
+      );
+      for (const position of positionsToClose) {
         const market = pairs.find((item) => item.pair === position.symbol);
         const closingPrice = Number(market?.price || 0);
         if (closingPrice <= 0) continue;
@@ -220,13 +231,13 @@ export default function TradePage() {
       addNotification(address, {
         type: "liquidation",
         title: "Positions liquidated",
-        message: `${closedCount} open position${closedCount === 1 ? " was" : "s were"} force-closed after the liquidation threshold was reached.`,
+        message: `${closedCount} open position${closedCount === 1 ? " was" : "s were"} in the affected wallet ${closedCount === 1 ? "was" : "were"} force-closed after its liquidation threshold was reached.`,
       });
-      toast.error("Liquidation threshold reached. All positions were closed.");
+      toast.error("Liquidation threshold reached. Positions in the affected wallet were closed.");
       await Promise.all([loadPositions(), loadTradeHistory()]);
     };
 
-    closeAllPositions()
+    closeLiquidatedWalletPositions()
       .catch((error) => {
         toast.error(error instanceof Error ? error.message : "Forced liquidation failed");
       })
