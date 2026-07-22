@@ -15,6 +15,7 @@ const MASTER_VOLUME_DECIMALS = 6;
 
 export type OnChainTraderTrade = {
   tradeId: bigint;
+  source: number;
   symbol: string;
   side: "LONG" | "SHORT";
   quantity: bigint;
@@ -116,6 +117,7 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
 
             return {
               tradeId,
+              source: record.source,
               symbol,
               side: record.direction === 0 ? "LONG" : "SHORT",
               quantity: record.quantity,
@@ -136,7 +138,13 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
           })
         );
 
-        const sortedRecords = [...records].sort((a, b) => Number(b.closedTime - a.closedTime));
+        // Copy-reward records belong to the master's reward ledger, not their
+        // executed trade history. Including them here makes a follower's close
+        // look like a trade placed by the master and corrupts profile metrics.
+        const tradeRecords = records.filter((record) => record.source !== 2);
+        const sortedRecords = [...tradeRecords].sort((a, b) =>
+          Number(b.closedTime - a.closedTime),
+        );
         const totalPnl = sumSignedScaledValues(sortedRecords.map((record) => [record.pnl, record.pnlDecimals]));
         const averageRoi = sortedRecords.length
           ? sumSignedScaledValues(sortedRecords.map((record) => [record.roi, record.roiDecimals])) /
