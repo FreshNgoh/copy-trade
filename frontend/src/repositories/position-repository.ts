@@ -21,6 +21,9 @@ export class PositionRepository {
         trade_source: data.trade_source ?? "OWN",
         copied_from_master: data.copied_from_master ?? null,
         copy_trade_position_id: data.copy_trade_position_id ?? null,
+        copy_trade_position_ids: data.copy_trade_position_id
+          ? [data.copy_trade_position_id]
+          : [],
         created_at: new Date(),
         updated_at: new Date(),
         status: "OPEN",
@@ -385,18 +388,28 @@ export class PositionRepository {
     position_id,
     quantity,
     entry_price,
+    leverage,
+    copy_trade_position_ids,
   }: {
     position_id: string;
     quantity: number;
     entry_price: number;
+    leverage?: number;
+    copy_trade_position_ids?: string[];
   }) {
+    const updates: Record<string, unknown> = {
+      quantity,
+      entry_price,
+      updated_at: new Date().toISOString(),
+    };
+    if (leverage !== undefined) updates.leverage = leverage;
+    if (copy_trade_position_ids !== undefined) {
+      updates.copy_trade_position_ids = copy_trade_position_ids;
+    }
+
     const { data, error } = await supabase
       .from("positions")
-      .update({
-        quantity,
-        entry_price,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq("position_id", position_id)
       .select()
       .single();
@@ -404,6 +417,59 @@ export class PositionRepository {
     if (error) throw error;
 
     return data;
+  }
+
+  async getOpenCopiedPosition({
+    followerWalletAddress,
+    masterWalletAddress,
+    symbol,
+    direction,
+  }: {
+    followerWalletAddress: string;
+    masterWalletAddress: string;
+    symbol: string;
+    direction: "LONG" | "SHORT";
+  }) {
+    const { data, error } = await supabase
+      .from("positions")
+      .select("*")
+      .ilike("trader_wallet_address", followerWalletAddress)
+      .ilike("copied_from_master", masterWalletAddress)
+      .eq("symbol", symbol)
+      .eq("direction", direction)
+      .eq("trade_source", "COPY")
+      .eq("status", "OPEN")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async updateCopiedPositionsTpSl({
+    masterWalletAddress,
+    symbol,
+    direction,
+    takeProfit,
+    stopLoss,
+  }: {
+    masterWalletAddress: string;
+    symbol: string;
+    direction: "LONG" | "SHORT";
+    takeProfit: number | null;
+    stopLoss: number | null;
+  }) {
+    const { error } = await supabase
+      .from("positions")
+      .update({ take_profit: takeProfit, stop_loss: stopLoss })
+      .ilike("copied_from_master", masterWalletAddress)
+      .eq("symbol", symbol)
+      .eq("direction", direction)
+      .eq("trade_source", "COPY")
+      .eq("status", "OPEN");
+
+    if (error) throw error;
   }
 }
 

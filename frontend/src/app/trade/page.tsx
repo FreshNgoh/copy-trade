@@ -29,6 +29,10 @@ const INITIAL_PAIRS = [
   { pair: "LINK/USDC", price: 0, change: 0, vol: "$0" },
 ];
 
+function getTradeModeStorageKey(address: string) {
+  return `copy-trade:trade-mode:${address.toLowerCase()}`;
+}
+
 async function fetchTickerData(pair: string) {
   const symbol = SYMBOL_MAP[pair];
   if (!symbol) return null;
@@ -104,7 +108,14 @@ export default function TradePage() {
         if (cancelled) return;
         const verified = Boolean(dashboard.portfolio?.is_verified_master);
         setIsVerifiedMaster(verified);
-        if (!verified) setTradeMode("MANUAL");
+        if (verified) {
+          const savedMode = window.localStorage.getItem(
+            getTradeModeStorageKey(address),
+          );
+          setTradeMode(savedMode === "COPY" ? "COPY" : "MANUAL");
+        } else {
+          setTradeMode("MANUAL");
+        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -445,9 +456,16 @@ export default function TradePage() {
             </div>
             <Switch
               checked={tradeMode === "COPY"}
-              onCheckedChange={(checked) =>
-                setTradeMode(checked ? "COPY" : "MANUAL")
-              }
+              onCheckedChange={(checked) => {
+                const nextMode = checked ? "COPY" : "MANUAL";
+                setTradeMode(nextMode);
+                if (address) {
+                  window.localStorage.setItem(
+                    getTradeModeStorageKey(address),
+                    nextMode,
+                  );
+                }
+              }}
               aria-label="Toggle copy trading mode"
               className="data-[state=checked]:bg-accent"
             />

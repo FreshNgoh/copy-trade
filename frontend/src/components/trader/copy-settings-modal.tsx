@@ -124,9 +124,17 @@ export function CopySettingsModal({
       setSubmitting(true);
 
       const dashboard = await getTraderDashboardApi(address);
-      if (investment > Number(dashboard.stats.copyWalletBalance || 0)) {
+      const currentActiveCap = currentSettings?.enabled
+        ? Number(formatUnits(currentSettings.maxCopyAmount, 6))
+        : 0;
+      const otherActiveAllocation = Math.max(
+        Number(dashboard.stats.copyActiveAllocation || 0) - currentActiveCap,
+        0,
+      );
+      const requiredCopyBalance = otherActiveAllocation + investment;
+      if (requiredCopyBalance > Number(dashboard.stats.copyWalletBalance || 0)) {
         throw new Error(
-          `Insufficient Copy Wallet balance. Transfer ${(investment - dashboard.stats.copyWalletBalance).toFixed(2)} USDC from your Manual Wallet first.`,
+          `Active allocations require ${requiredCopyBalance.toFixed(2)} USDC. Transfer ${(requiredCopyBalance - dashboard.stats.copyWalletBalance).toFixed(2)} USDC to Copy Wallet or pause another master first.`,
         );
       }
 

@@ -8,6 +8,7 @@ alter table positions
   add column if not exists trade_source text not null default 'OWN',
   add column if not exists copied_from_master text,
   add column if not exists copy_trade_position_id text,
+  add column if not exists copy_trade_position_ids text[] not null default '{}',
   add column if not exists gross_pnl numeric,
   add column if not exists master_reward numeric,
   add column if not exists follower_reward numeric,

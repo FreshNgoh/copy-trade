@@ -37,7 +37,8 @@ export default function WalletTransferPage() {
   }, [load]);
 
   const manualAvailable = dashboard?.stats.freeCollateral ?? 0;
-  const copyAvailable = dashboard?.stats.copyFreeCollateral ?? 0;
+  const copyAvailable = dashboard?.stats.copyTransferableBalance ?? 0;
+  const copyLockedCollateral = dashboard?.stats.copyLockedCollateral ?? 0;
   const available = direction === "manual_to_copy" ? manualAvailable : copyAvailable;
   const sourceMargin = direction === "manual_to_copy"
     ? dashboard?.stats.manualMarginUsed ?? 0
@@ -131,6 +132,17 @@ export default function WalletTransferPage() {
                     Remaining transferable collateral: ${Math.max(available - Number(amount), 0).toFixed(2)}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+          {direction === "copy_to_manual" && copyLockedCollateral > 0 && (
+            <div className="mt-5 flex gap-3 border border-warning/40 bg-warning/5 p-4" role="alert">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              <div>
+                <div className="text-xs font-medium text-warning">Copy allocation locked</div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  ${copyLockedCollateral.toFixed(2)} is reserved by active copy settings or open copied positions. Pause the active copy relationship to release unused allocation.
+                </p>
               </div>
             </div>
           )}

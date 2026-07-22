@@ -6,8 +6,10 @@ import { MasterEligibilityButton } from "@/components/master-trader/master-eligi
 import { VerifiedMasterCard } from "@/components/master-trader/verified-master-card";
 import { cn } from "@/lib/utils";
 import { useVerifiedMasterTraders } from "@/hooks/use-verified-master-traders";
+import { useAccount } from "wagmi";
 
 export default function ExplorePage() {
+  const { address } = useAccount();
   const [search, setSearch] = React.useState("");
   const [sort, setSort] = React.useState<"roi" | "followers" | "volume" | "trades">("roi");
   const { data: verifiedTraders = [], error, isLoading, isFetching } = useVerifiedMasterTraders();
@@ -15,6 +17,13 @@ export default function ExplorePage() {
   const filtered = React.useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     const results = verifiedTraders.filter((trader) => {
+      if (
+        address &&
+        trader.traderWalletAddress.toLowerCase() === address.toLowerCase()
+      ) {
+        return false;
+      }
+
       if (!normalizedSearch) return true;
 
       return (
@@ -32,7 +41,7 @@ export default function ExplorePage() {
             ? b.tradingVolume - a.tradingVolume
             : b.totalTrades - a.totalTrades,
     );
-  }, [search, sort, verifiedTraders]);
+  }, [address, search, sort, verifiedTraders]);
 
   return (
     <div data-testid="explore-page" className="min-h-screen bg-background">

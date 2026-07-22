@@ -13,6 +13,7 @@ export interface Position {
   trade_source?: "OWN" | "MASTER_COPY" | "COPY";
   copied_from_master?: string | null;
   copy_trade_position_id?: string | null;
+  copy_trade_position_ids?: string[] | null;
   gross_pnl?: number | null;
   master_reward?: number | null;
   follower_reward?: number | null;
@@ -34,6 +35,7 @@ export interface CreatePositionDTO {
   execution_mode?: "MANUAL" | "COPY";
   copied_from_master?: string | null;
   copy_trade_position_id?: string | null;
+  copy_trade_position_ids?: string[] | null;
 }
 
 export interface ClosedPosition {
@@ -49,6 +51,7 @@ export interface ClosedPosition {
   trade_source?: "OWN" | "MASTER_COPY" | "COPY";
   copied_from_master?: string | null;
   copy_trade_position_id?: string | null;
+  copy_trade_position_ids?: string[] | null;
   gross_pnl?: number | null;
   master_reward?: number | null;
   follower_reward?: number | null;

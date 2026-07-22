@@ -13,6 +13,31 @@ export type SaveCopySettingsInput = {
 };
 
 export class CopyTradingRepository {
+  async getActiveCopyAllocation({
+    followerWalletAddress,
+    excludeMasterWalletAddress,
+  }: {
+    followerWalletAddress: string;
+    excludeMasterWalletAddress?: string;
+  }) {
+    const { data, error } = await supabase
+      .from("copy_trading_followers")
+      .select("master_wallet_address,max_copy_amount")
+      .ilike("follower_wallet_address", followerWalletAddress)
+      .eq("enabled", true);
+
+    if (error) throw error;
+
+    const excludedMaster = excludeMasterWalletAddress?.toLowerCase();
+    return (data ?? []).reduce((total, setting) => {
+      if (setting.master_wallet_address?.toLowerCase() === excludedMaster) {
+        return total;
+      }
+
+      return total + Number(setting.max_copy_amount || 0);
+    }, 0);
+  }
+
   async saveCopySettings(input: SaveCopySettingsInput) {
     await Promise.all([
       traderDashboardRepository.ensurePortfolio(input.masterWalletAddress),
@@ -43,15 +68,18 @@ export class CopyTradingRepository {
       }
     }
 
-    if (allocationDelta > 0) {
-      const portfolio = await traderDashboardRepository.ensurePortfolio(
-        input.followerWalletAddress,
+    const [portfolio, otherActiveAllocation] = await Promise.all([
+      traderDashboardRepository.ensurePortfolio(input.followerWalletAddress),
+      this.getActiveCopyAllocation({
+        followerWalletAddress: input.followerWalletAddress,
+        excludeMasterWalletAddress: input.masterWalletAddress,
+      }),
+    ]);
+    const requiredCopyBalance = otherActiveAllocation + input.maxCopyAmount;
+    if (requiredCopyBalance > Number(portfolio.copy_wallet_balance || 0)) {
+      throw new Error(
+        `Active copy allocations require ${requiredCopyBalance.toFixed(2)} USDC. Transfer more funds to Copy Wallet or pause another master first.`,
       );
-      if (input.maxCopyAmount > Number(portfolio.copy_wallet_balance || 0)) {
-        throw new Error(
-          "Copy allocation exceeds your Copy Wallet balance. Transfer funds to Copy Wallet first.",
-        );
-      }
     }
 
     const { data, error } = await supabase

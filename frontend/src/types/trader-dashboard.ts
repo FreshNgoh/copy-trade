@@ -28,6 +28,9 @@ export interface TraderDashboardStats {
   copyMarginUsed: number;
   freeCollateral: number;
   copyFreeCollateral: number;
+  copyLockedCollateral: number;
+  copyActiveAllocation: number;
+  copyTransferableBalance: number;
   openPositionValue: number;
   openPositionsCount: number;
   openOrdersCount: number;

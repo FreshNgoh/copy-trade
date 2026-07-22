@@ -9,6 +9,7 @@ import type {
 } from "@/types/trader-dashboard";
 import type { LimitOrder } from "@/types/limit-order";
 import { calculateWalletLiquidationPrices } from "@/lib/trading/calculation";
+import { copyTradingRepository } from "@/repositories/copy-trading-repository";
 
 function toNumber(value: unknown) {
   const numberValue = Number(value);
@@ -127,10 +128,13 @@ function createActivityFromOrder(order: LimitOrder): TraderDashboardActivity {
 export async function getTraderDashboard(
   traderWalletAddress: string,
 ): Promise<TraderDashboard> {
-  const [portfolio, positions, openOrders] = await Promise.all([
+  const [portfolio, positions, openOrders, activeCopyAllocation] = await Promise.all([
     traderDashboardRepository.getPortfolio(traderWalletAddress),
     traderDashboardRepository.getPositions(traderWalletAddress),
     traderDashboardRepository.getOpenOrders(traderWalletAddress),
+    copyTradingRepository.getActiveCopyAllocation({
+      followerWalletAddress: traderWalletAddress,
+    }),
   ]);
 
   const activePositions = positions.filter(
@@ -185,6 +189,11 @@ export async function getTraderDashboard(
     : null;
   const walletBalance = portfolioData?.wallet_balance ?? 0;
   const copyWalletBalance = portfolioData?.copy_wallet_balance ?? 0;
+  const copyLockedCollateral = Math.max(activeCopyAllocation, copyMarginUsed);
+  const copyTransferableBalance = Math.max(
+    copyWalletBalance - copyLockedCollateral,
+    0,
+  );
   const totalWalletBalance = walletBalance + copyWalletBalance;
   const activePositionsWithLiquidation = calculateWalletLiquidationPrices(
     activePositions,
@@ -215,6 +224,9 @@ export async function getTraderDashboard(
       copyMarginUsed,
       freeCollateral: Math.max(walletBalance - manualMarginUsed, 0),
       copyFreeCollateral: Math.max(copyWalletBalance - copyMarginUsed, 0),
+      copyLockedCollateral,
+      copyActiveAllocation: activeCopyAllocation,
+      copyTransferableBalance,
       openPositionValue,
       openPositionsCount: portfolioData?.positions ?? activePositions.length,
       openOrdersCount: openOrders.length,
@@ -297,18 +309,22 @@ export async function transferCopyWalletToManualWallet({
     throw new Error("Transfer amount must be greater than 0");
   }
 
-  const [portfolio, activeCopiedMargin] = await Promise.all([
+  const [portfolio, activeCopiedMargin, activeCopyAllocation] = await Promise.all([
     traderDashboardRepository.ensurePortfolio(traderWalletAddress),
     positionRepository.getOpenCopiedMargin({
       followerWalletAddress: traderWalletAddress,
     }),
+    copyTradingRepository.getActiveCopyAllocation({
+      followerWalletAddress: traderWalletAddress,
+    }),
   ]);
   const copyWalletBalance = toNumber(portfolio.copy_wallet_balance);
-  const copyFreeCollateral = Math.max(copyWalletBalance - activeCopiedMargin, 0);
+  const lockedCollateral = Math.max(activeCopyAllocation, activeCopiedMargin);
+  const copyFreeCollateral = Math.max(copyWalletBalance - lockedCollateral, 0);
 
   if (amount > copyFreeCollateral) {
     throw new Error(
-      `Only ${copyFreeCollateral.toFixed(2)} USDC is available to transfer from copy wallet.`,
+      `Only ${copyFreeCollateral.toFixed(2)} USDC is transferable. ${lockedCollateral.toFixed(2)} USDC is locked by active copy allocations or open copied positions. Pause copying to unlock its unused allocation.`,
     );
   }
 

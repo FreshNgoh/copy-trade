@@ -244,6 +244,7 @@ export async function openOrIncreasePosition(data: CreatePositionDTO) {
     position_id: existingPosition.position_id,
     quantity: newQty,
     entry_price: averageEntryPrice,
+    leverage: Number(data.leverage),
   });
 
   await syncCopiedFollowers(data);
@@ -328,10 +329,24 @@ async function settleClosedPositionRewards(position) {
 }
 
 async function releaseCopiedMargin(position) {
-  if (!isCopiedPosition(position) || !position.copy_trade_position_id) return;
+  if (!isCopiedPosition(position)) return;
+
+  const copyPositionIds = Array.from(
+    new Set(
+      Array.isArray(position.copy_trade_position_ids) &&
+      position.copy_trade_position_ids.length > 0
+        ? position.copy_trade_position_ids
+        : position.copy_trade_position_id
+          ? [position.copy_trade_position_id]
+          : [],
+    ),
+  );
+  if (copyPositionIds.length === 0) return;
 
   try {
-    await closeCopiedTradeOnChain(position.copy_trade_position_id);
+    await Promise.all(
+      copyPositionIds.map((id) => closeCopiedTradeOnChain(String(id))),
+    );
   } catch (error) {
     console.error("CopyTrading margin release failed:", {
       positionId: position.position_id,
@@ -428,5 +443,17 @@ export async function getClosedPositions(traderWalletAddress: string) {
 }
 
 export async function updateActivePositions(position: UpdatePosition) {
-  return positionRepository.updatePosition(position);
+  const updatedPosition = await positionRepository.updatePosition(position);
+
+  if (updatedPosition.trade_source === "MASTER_COPY") {
+    await positionRepository.updateCopiedPositionsTpSl({
+      masterWalletAddress: updatedPosition.trader_wallet_address,
+      symbol: updatedPosition.symbol,
+      direction: updatedPosition.direction,
+      takeProfit: updatedPosition.take_profit,
+      stopLoss: updatedPosition.stop_loss,
+    });
+  }
+
+  return updatedPosition;
 }

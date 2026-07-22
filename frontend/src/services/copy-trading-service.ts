@@ -141,6 +141,36 @@ async function openOrIncreaseCopiedPosition({
   const entryPrice = Number(masterTrade.entry_price);
   const leverage = Number(masterTrade.leverage);
   const quantity = (copiedMargin * leverage) / entryPrice;
+  const existingPosition = await positionRepository.getOpenCopiedPosition({
+    followerWalletAddress: follower,
+    masterWalletAddress: masterTrade.trader_wallet_address,
+    symbol: masterTrade.symbol,
+    direction: masterTrade.direction,
+  });
+
+  if (existingPosition) {
+    const oldQuantity = Number(existingPosition.quantity);
+    const oldEntryPrice = Number(existingPosition.entry_price);
+    const nextQuantity = oldQuantity + quantity;
+    const nextEntryPrice =
+      (oldQuantity * oldEntryPrice + quantity * entryPrice) / nextQuantity;
+    const existingIds = Array.isArray(existingPosition.copy_trade_position_ids)
+      ? existingPosition.copy_trade_position_ids
+      : existingPosition.copy_trade_position_id
+        ? [existingPosition.copy_trade_position_id]
+        : [];
+
+    return positionRepository.updatePositionAfterFill({
+      position_id: existingPosition.position_id,
+      quantity: nextQuantity,
+      entry_price: nextEntryPrice,
+      leverage,
+      copy_trade_position_ids: Array.from(
+        new Set([...existingIds, copyTradePositionId]),
+      ),
+    });
+  }
+
   const createdPosition = await positionRepository.createMarketOrder({
     trader_wallet_address: follower,
     symbol: masterTrade.symbol,
