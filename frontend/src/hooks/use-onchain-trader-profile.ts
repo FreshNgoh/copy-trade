@@ -15,6 +15,7 @@ const MASTER_VOLUME_DECIMALS = 6;
 
 export type OnChainTraderTrade = {
   tradeId: bigint;
+  source: number;
   symbol: string;
   side: "LONG" | "SHORT";
   quantity: bigint;
@@ -43,8 +44,10 @@ export type OnChainTraderProfile = {
   totalTrades: number;
   totalPnl: number | null;
   averageRoi: number | null;
+  thirtyDayRoi: number | null;
   winRate: number | null;
   tradingVolume: number | null;
+  maxDrawdown: number | null;
   cumulativePnlSeries: { t: number; pnl: number }[];
 };
 
@@ -114,6 +117,7 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
 
             return {
               tradeId,
+              source: record.source,
               symbol,
               side: record.direction === 0 ? "LONG" : "SHORT",
               quantity: record.quantity,
@@ -134,11 +138,26 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
           })
         );
 
-        const sortedRecords = [...records].sort((a, b) => Number(b.closedTime - a.closedTime));
+        // Copy-reward records belong to the master's reward ledger, not their
+        // executed trade history. Including them here makes a follower's close
+        // look like a trade placed by the master and corrupts profile metrics.
+        const tradeRecords = records.filter((record) => record.source !== 2);
+        const sortedRecords = [...tradeRecords].sort((a, b) =>
+          Number(b.closedTime - a.closedTime),
+        );
         const totalPnl = sumSignedScaledValues(sortedRecords.map((record) => [record.pnl, record.pnlDecimals]));
         const averageRoi = sortedRecords.length
           ? sumSignedScaledValues(sortedRecords.map((record) => [record.roi, record.roiDecimals])) /
             sortedRecords.length
+          : null;
+        const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
+        const recentRecords = sortedRecords.filter(
+          (record) => Number(record.closedTime) >= thirtyDaysAgo,
+        );
+        const thirtyDayRoi = recentRecords.length
+          ? sumSignedScaledValues(
+              recentRecords.map((record) => [record.roi, record.roiDecimals]),
+            ) / recentRecords.length
           : null;
         const wins = sortedRecords.filter((record) => record.pnl > 0n).length;
         const tradingVolume = sortedRecords.reduce<number | null>((total, record) => {
@@ -146,11 +165,15 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
           return total + record.volumeUsd;
         }, 0);
         let cumulativePnl = 0;
+        let peakPnl = 0;
+        let maxDrawdown = 0;
         const cumulativePnlSeries = sortedRecords
           .slice()
           .sort((a, b) => Number(a.closedTime - b.closedTime))
           .map((record) => {
             cumulativePnl += signedScaledToNumber(record.pnl, record.pnlDecimals);
+            peakPnl = Math.max(peakPnl, cumulativePnl);
+            maxDrawdown = Math.max(maxDrawdown, peakPnl - cumulativePnl);
             return {
               t: Number(record.closedTime) * 1000,
               pnl: Number(cumulativePnl.toFixed(2)),
@@ -172,8 +195,10 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
             totalTrades: sortedRecords.length,
             totalPnl,
             averageRoi,
+            thirtyDayRoi,
             winRate: sortedRecords.length ? (wins / sortedRecords.length) * 100 : null,
             tradingVolume,
+            maxDrawdown,
             cumulativePnlSeries,
           });
         }

@@ -8,29 +8,37 @@ import { useAccount } from "wagmi";
 import { createPositionApi } from "@/lib/api/position-api";
 import { createOrderApi } from "@/lib/api/order-api";
 import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
-import { calculateTradeMetrics } from "@/lib/trading/calculation";
+import { calculateTradeMetrics, calculateWalletLiquidationPrices } from "@/lib/trading/calculation";
+import type { TraderDashboardPosition } from "@/types/trader-dashboard";
 
 export function TradePanel({
   pair,
   midPrice,
   onPositionCreated,
   onOrderCreated,
+  tradeMode,
 }: {
   pair?: string;
   midPrice: number;
   onPositionCreated?: () => void;
   onOrderCreated?: () => void;
+  tradeMode: "MANUAL" | "COPY";
 }) {
   const { address, isConnected } = useAccount();
   const [direction, setDirection] = React.useState<"BUY" | "SELL">("BUY");
   const [type, setType] = React.useState<"MARKET" | "LIMIT">("MARKET");
-  const [price, setLimitPrice] = React.useState(midPrice.toString());
+  const [price, setLimitPrice] = React.useState(midPrice.toFixed(2));
   const [margin, setMargin] = React.useState("");
   const [quantityInput, setQuantityInputValue] = React.useState("");
   const [leverage, setLeverage] = React.useState([5]);
   const [stopLoss, setStopLoss] = React.useState("");
   const [takeProfit, setTakeProfit] = React.useState("");
   const [freeCollateral, setFreeCollateral] = React.useState(0);
+  const [manualWalletBalance, setManualWalletBalance] = React.useState(0);
+  const [copyWalletBalance, setCopyWalletBalance] = React.useState(0);
+  const [manualFreeCollateral, setManualFreeCollateral] = React.useState(0);
+  const [copyFreeCollateral, setCopyFreeCollateral] = React.useState(0);
+  const [openPositions, setOpenPositions] = React.useState<TraderDashboardPosition[]>([]);
   const orderPrice = type === "MARKET" ? midPrice : Number(price);
   const marginAmount = Number(margin);
   const orderQuantity =
@@ -45,6 +53,38 @@ export function TradePanel({
     margin: marginAmount,
     direction: direction === "BUY" ? "LONG" : "SHORT",
   });
+  const estimatedLiquidationPrice = React.useMemo(() => {
+    if (!pair || orderQuantity <= 0 || orderPrice <= 0) return 0;
+    const positionDirection: "LONG" | "SHORT" = direction === "BUY" ? "LONG" : "SHORT";
+    const selectedPositions = openPositions.filter(
+      (position) =>
+        tradeMode === "COPY"
+          ? position.trade_source === "MASTER_COPY"
+          : position.trade_source === "OWN" && !position.copied_from_master,
+    );
+    const matching = selectedPositions.find(
+      (position) => position.symbol === pair && position.direction === positionDirection,
+    );
+    const previewId = matching?.position_id ?? "preview-position";
+    const previewPositions = matching
+      ? selectedPositions.map((position) => {
+          if (position.position_id !== matching.position_id) return position;
+          const oldQuantity = Number(position.quantity);
+          const nextQuantity = oldQuantity + orderQuantity;
+          return {
+            ...position,
+            quantity: nextQuantity,
+            entry_price:
+              (oldQuantity * Number(position.entry_price) + orderQuantity * orderPrice) /
+              nextQuantity,
+          };
+        })
+      : [...selectedPositions, { position_id: previewId, trader_wallet_address: address ?? "", symbol: pair, quantity: orderQuantity, direction: positionDirection, entry_price: orderPrice, leverage: leverage[0], stop_loss: null, take_profit: null, status: "OPEN" as const, created_at: "", updated_at: "", trade_source: tradeMode === "COPY" ? "MASTER_COPY" as const : "OWN" as const }];
+    return calculateWalletLiquidationPrices(previewPositions, {
+      manual: manualWalletBalance,
+      copy: copyWalletBalance,
+    }).find((position) => position.position_id === previewId)?.liquidation_price ?? 0;
+  }, [address, copyWalletBalance, direction, leverage, manualWalletBalance, openPositions, orderPrice, orderQuantity, pair, tradeMode]);
   const isOverFreeCollateral =
     marginAmount > 0 && marginAmount > freeCollateral;
   const canSubmit =
@@ -63,12 +103,29 @@ export function TradePanel({
 
     try {
       const dashboard = await getTraderDashboardApi(address);
-      setFreeCollateral(Number(dashboard.stats.freeCollateral || 0));
+      const nextManualFree = Number(dashboard.stats.freeCollateral || 0);
+      const nextCopyFree = Number(dashboard.stats.copyFreeCollateral || 0);
+      setManualFreeCollateral(nextManualFree);
+      setCopyFreeCollateral(nextCopyFree);
+      setFreeCollateral(tradeMode === "COPY" ? nextCopyFree : nextManualFree);
+      setManualWalletBalance(Number(dashboard.stats.walletBalance || 0));
+      setCopyWalletBalance(Number(dashboard.stats.copyWalletBalance || 0));
+      setOpenPositions(dashboard.activePositions);
     } catch (error) {
       console.error("Failed to fetch free collateral:", error);
       setFreeCollateral(0);
+      setManualWalletBalance(0);
+      setCopyWalletBalance(0);
+      setOpenPositions([]);
     }
-  }, [address]);
+  }, [address, tradeMode]);
+
+  React.useEffect(() => {
+    setFreeCollateral(
+      tradeMode === "COPY" ? copyFreeCollateral : manualFreeCollateral,
+    );
+    if (tradeMode === "COPY") setType("MARKET");
+  }, [copyFreeCollateral, manualFreeCollateral, tradeMode]);
 
   React.useEffect(() => {
     loadFreeCollateral();
@@ -132,6 +189,7 @@ export function TradePanel({
         leverage: leverage[0],
         stop_loss: stopLoss ? Number(stopLoss) : null,
         take_profit: takeProfit ? Number(takeProfit) : null,
+        execution_mode: tradeMode,
       });
 
       toast.success("Position Created", {
@@ -188,7 +246,7 @@ export function TradePanel({
       await loadFreeCollateral();
 
       // Reset input
-      setLimitPrice(midPrice.toString());
+      setLimitPrice(midPrice.toFixed(2));
       setMargin("");
       setQuantityInputValue("");
       setStopLoss("");
@@ -204,7 +262,7 @@ export function TradePanel({
 
   // reset the limit price to mid price when pair changes
   React.useEffect(() => {
-    setLimitPrice(midPrice.toString());
+    setLimitPrice(midPrice.toFixed(2));
   }, [pair]);
 
   return (
@@ -248,9 +306,10 @@ export function TradePanel({
               key={t}
               data-testid={`order-type-${t.toLowerCase()}`}
               onClick={() => {
+                if (tradeMode === "COPY" && t === "LIMIT") return;
                 setType(t);
 
-                if (t === "LIMIT") setLimitPrice(midPrice.toString());
+                if (t === "LIMIT") setLimitPrice(midPrice.toFixed(2));
               }}
               className={cn(
                 "flex-1 py-1.5 text-[11px] font-mono uppercase tracking-wider transition-colors",
@@ -258,6 +317,7 @@ export function TradePanel({
                   ? "bg-white text-black"
                   : "text-muted-foreground hover:text-white",
               )}
+              disabled={tradeMode === "COPY" && t === "LIMIT"}
             >
               {t}
             </button>
@@ -410,8 +470,8 @@ export function TradePanel({
               Estimate Liq. Price
             </span>
             <span className="font-mono">
-              {metrics.liquidationPrice > 0
-                ? `$${metrics.liquidationPrice.toFixed(2)}`
+              {estimatedLiquidationPrice > 0
+                ? `$${estimatedLiquidationPrice.toFixed(2)}`
                 : "-"}
             </span>
           </div>

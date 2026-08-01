@@ -11,7 +11,7 @@ import {
   useVerifyMaster,
 } from "@/hooks/use-master-eligibility";
 import { MasterEligibilityModal } from "./master-eligibility-modal";
-import { VerifiedMasterBadge } from "./verified-master-badge";
+// import { VerifiedMasterBadge } from "./verified-master-badge";
 
 export function MasterEligibilityButton() {
   const { address, isConnected } = useAccount();
@@ -69,7 +69,7 @@ export function MasterEligibilityButton() {
 
   return (
     <div className="flex flex-col items-stretch gap-2 sm:items-end">
-      {isVerified && <VerifiedMasterBadge />}
+      {/* {isVerified && <VerifiedMasterBadge />} */}
       <Button
         type="button"
         onClick={handleOpen}
@@ -77,7 +77,8 @@ export function MasterEligibilityButton() {
         className={cn(
           "font-mono text-xs uppercase tracking-wider",
           isEligible && "bg-accent text-black hover:bg-accent/90",
-          isVerified && "border-success bg-success/10 text-success hover:bg-success/10",
+          isVerified &&
+            "border-success bg-success/10 text-success hover:bg-success/10",
           !isEligible &&
             !isVerified &&
             "border-border bg-surface text-muted-foreground hover:border-border-focus hover:bg-surface",

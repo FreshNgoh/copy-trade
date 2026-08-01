@@ -6,6 +6,19 @@ import {
 } from "@/types/position";
 
 export class PositionRepository {
+  async getCopiedPositionsForMaster(masterWalletAddress: string) {
+    const { data, error } = await supabase
+      .from("positions")
+      .select(
+        "position_id,trader_wallet_address,status,Pnl,follower_reward,master_reward,created_at,updated_at",
+      )
+      .ilike("copied_from_master", masterWalletAddress)
+      .eq("trade_source", "COPY");
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
   async createMarketOrder(data: CreatePositionDTO) {
     const { data: position, error } = await supabase
       .from("positions")
@@ -18,7 +31,12 @@ export class PositionRepository {
         leverage: data.leverage,
         stop_loss: data.stop_loss,
         take_profit: data.take_profit,
-        liquidation_price: data.liquidation_price,
+        trade_source: data.trade_source ?? "OWN",
+        copied_from_master: data.copied_from_master ?? null,
+        copy_trade_position_id: data.copy_trade_position_id ?? null,
+        copy_trade_position_ids: data.copy_trade_position_id
+          ? [data.copy_trade_position_id]
+          : [],
         created_at: new Date(),
         updated_at: new Date(),
         status: "OPEN",
@@ -58,6 +76,71 @@ export class PositionRepository {
       throw error;
     }
     return positions;
+  }
+
+  async getOpenCopiedMargin({
+    followerWalletAddress,
+    masterWalletAddress,
+  }: {
+    followerWalletAddress: string;
+    masterWalletAddress?: string;
+  }) {
+    let query = supabase
+      .from("positions")
+      .select("quantity,entry_price,leverage")
+      .ilike("trader_wallet_address", followerWalletAddress)
+      .eq("trade_source", "COPY")
+      .eq("status", "OPEN");
+
+    if (masterWalletAddress) {
+      query = query.ilike("copied_from_master", masterWalletAddress);
+    }
+
+    const { data: positions, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    return (positions ?? []).reduce((total, position) => {
+      const leverage = Number(position.leverage);
+      if (leverage <= 0) return total;
+
+      return (
+        total +
+        (Number(position.quantity) * Number(position.entry_price)) / leverage
+      );
+    }, 0);
+  }
+
+  async getOpenManualMargin({
+    traderWalletAddress,
+  }: {
+    traderWalletAddress: string;
+  }) {
+    const { data: positions, error } = await supabase
+      .from("positions")
+      .select("quantity,entry_price,leverage,trade_source,copied_from_master")
+      .ilike("trader_wallet_address", traderWalletAddress)
+      .eq("status", "OPEN");
+
+    if (error) throw error;
+
+    return (positions ?? [])
+      .filter(
+        (position) =>
+          position.trade_source !== "MASTER_COPY" &&
+          position.trade_source !== "COPY" &&
+          !position.copied_from_master,
+      )
+      .reduce((total, position) => {
+      const leverage = Number(position.leverage);
+      return leverage > 0
+        ? total +
+            (Number(position.quantity) * Number(position.entry_price)) /
+              leverage
+        : total;
+      }, 0);
   }
 
   async closePosition(data: ClosePositionDTO) {
@@ -165,6 +248,52 @@ export class PositionRepository {
     }
   }
 
+  async markRewardsSettled({
+    positionId,
+    grossPnl,
+    masterReward,
+    followerReward,
+  }: {
+    positionId: string;
+    grossPnl: number;
+    masterReward: number;
+    followerReward: number;
+  }) {
+    const { data, error } = await supabase
+      .from("positions")
+      .update({
+        gross_pnl: grossPnl,
+        master_reward: masterReward,
+        follower_reward: followerReward,
+        rewards_settled: true,
+        reward_settled_at: new Date().toISOString(),
+      })
+      .eq("position_id", positionId)
+      .eq("status", "CLOSED")
+      .or("rewards_settled.is.null,rewards_settled.eq.false")
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return Boolean(data);
+  }
+
+  async resetRewardsSettlement(positionId: string) {
+    const { error } = await supabase
+      .from("positions")
+      .update({
+        rewards_settled: false,
+        reward_settled_at: null,
+      })
+      .eq("position_id", positionId)
+      .eq("status", "CLOSED");
+
+    if (error) throw error;
+  }
+
   async getClosedPositions(traderWalletAddress: string) {
     const { data: positions, error } = await supabase
       .from("positions")
@@ -259,10 +388,12 @@ export class PositionRepository {
     trader_wallet_address,
     symbol,
     direction,
+    trade_source = "OWN",
   }: {
     trader_wallet_address: string;
     symbol: string;
     direction: "LONG" | "SHORT";
+    trade_source?: "OWN" | "MASTER_COPY";
   }) {
     const { data, error } = await supabase
       .from("positions")
@@ -271,6 +402,7 @@ export class PositionRepository {
       .eq("symbol", symbol)
       .eq("direction", direction)
       .eq("status", "OPEN")
+      .eq("trade_source", trade_source)
       .maybeSingle();
 
     if (error) throw error;
@@ -282,21 +414,28 @@ export class PositionRepository {
     position_id,
     quantity,
     entry_price,
-    liquidation_price,
+    leverage,
+    copy_trade_position_ids,
   }: {
     position_id: string;
     quantity: number;
     entry_price: number;
-    liquidation_price: number;
+    leverage?: number;
+    copy_trade_position_ids?: string[];
   }) {
+    const updates: Record<string, unknown> = {
+      quantity,
+      entry_price,
+      updated_at: new Date().toISOString(),
+    };
+    if (leverage !== undefined) updates.leverage = leverage;
+    if (copy_trade_position_ids !== undefined) {
+      updates.copy_trade_position_ids = copy_trade_position_ids;
+    }
+
     const { data, error } = await supabase
       .from("positions")
-      .update({
-        quantity,
-        entry_price,
-        liquidation_price,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq("position_id", position_id)
       .select()
       .single();
@@ -304,6 +443,59 @@ export class PositionRepository {
     if (error) throw error;
 
     return data;
+  }
+
+  async getOpenCopiedPosition({
+    followerWalletAddress,
+    masterWalletAddress,
+    symbol,
+    direction,
+  }: {
+    followerWalletAddress: string;
+    masterWalletAddress: string;
+    symbol: string;
+    direction: "LONG" | "SHORT";
+  }) {
+    const { data, error } = await supabase
+      .from("positions")
+      .select("*")
+      .ilike("trader_wallet_address", followerWalletAddress)
+      .ilike("copied_from_master", masterWalletAddress)
+      .eq("symbol", symbol)
+      .eq("direction", direction)
+      .eq("trade_source", "COPY")
+      .eq("status", "OPEN")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async updateCopiedPositionsTpSl({
+    masterWalletAddress,
+    symbol,
+    direction,
+    takeProfit,
+    stopLoss,
+  }: {
+    masterWalletAddress: string;
+    symbol: string;
+    direction: "LONG" | "SHORT";
+    takeProfit: number | null;
+    stopLoss: number | null;
+  }) {
+    const { error } = await supabase
+      .from("positions")
+      .update({ take_profit: takeProfit, stop_loss: stopLoss })
+      .ilike("copied_from_master", masterWalletAddress)
+      .eq("symbol", symbol)
+      .eq("direction", direction)
+      .eq("trade_source", "COPY")
+      .eq("status", "OPEN");
+
+    if (error) throw error;
   }
 }
 

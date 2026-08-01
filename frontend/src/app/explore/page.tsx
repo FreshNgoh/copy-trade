@@ -6,8 +6,10 @@ import { MasterEligibilityButton } from "@/components/master-trader/master-eligi
 import { VerifiedMasterCard } from "@/components/master-trader/verified-master-card";
 import { cn } from "@/lib/utils";
 import { useVerifiedMasterTraders } from "@/hooks/use-verified-master-traders";
+import { useAccount } from "wagmi";
 
 export default function ExplorePage() {
+  const { address } = useAccount();
   const [search, setSearch] = React.useState("");
   const [sort, setSort] = React.useState<"roi" | "followers" | "volume" | "trades">("roi");
   const { data: verifiedTraders = [], error, isLoading, isFetching } = useVerifiedMasterTraders();
@@ -15,6 +17,13 @@ export default function ExplorePage() {
   const filtered = React.useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     const results = verifiedTraders.filter((trader) => {
+      if (
+        address &&
+        trader.traderWalletAddress.toLowerCase() === address.toLowerCase()
+      ) {
+        return false;
+      }
+
       if (!normalizedSearch) return true;
 
       return (
@@ -32,7 +41,7 @@ export default function ExplorePage() {
             ? b.tradingVolume - a.tradingVolume
             : b.totalTrades - a.totalTrades,
     );
-  }, [search, sort, verifiedTraders]);
+  }, [address, search, sort, verifiedTraders]);
 
   return (
     <div data-testid="explore-page" className="min-h-screen bg-background">
@@ -57,7 +66,21 @@ export default function ExplorePage() {
           <MasterEligibilityButton />
         </div>
 
-        <div className="grid grid-cols-12 gap-6">
+        <div className="mb-4 flex min-h-5 items-center justify-between">
+          <div className="font-mono text-sm text-muted-foreground">
+            {isLoading
+              ? "Loading verified masters"
+              : `${filtered.length} verified masters`}
+          </div>
+          {isFetching && !isLoading && (
+            <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Refreshing
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-12 items-start gap-6">
           <aside className="col-span-12 lg:col-span-3">
             <div className="sticky top-20 border border-border bg-surface p-4">
               <div className="mb-4 flex items-center gap-2">
@@ -101,20 +124,6 @@ export default function ExplorePage() {
           </aside>
 
           <div className="col-span-12 lg:col-span-9">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="font-mono text-sm text-muted-foreground">
-                {isLoading
-                  ? "Loading verified masters"
-                  : `${filtered.length} verified masters`}
-              </div>
-              {isFetching && !isLoading && (
-                <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Refreshing
-                </div>
-              )}
-            </div>
-
             {error && (
               <div className="border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-danger">
                 {error.message}

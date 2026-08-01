@@ -2,6 +2,9 @@ import {
   addTraderWalletBalance,
   ensureTraderPortfolio,
   getTraderDashboard,
+  transferManualWalletToCopyWallet,
+  transferCopyWalletToManualWallet,
+  withdrawTraderWalletBalance,
 } from "@/services/trader-dashboard-service";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -79,10 +82,29 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const portfolio = await addTraderWalletBalance({
-      traderWalletAddress,
-      amount,
-    });
+    let portfolio;
+
+    if (body.action === "withdraw") {
+      portfolio = await withdrawTraderWalletBalance({
+        traderWalletAddress,
+        amount,
+      });
+    } else if (body.action === "transfer_copy_to_manual") {
+      portfolio = await transferCopyWalletToManualWallet({
+        traderWalletAddress,
+        amount,
+      });
+    } else if (body.action === "transfer_manual_to_copy") {
+      portfolio = await transferManualWalletToCopyWallet({
+        traderWalletAddress,
+        amount,
+      });
+    } else {
+      portfolio = await addTraderWalletBalance({
+        traderWalletAddress,
+        amount,
+      });
+    }
 
     return NextResponse.json(portfolio, { status: 200 });
   } catch (error) {

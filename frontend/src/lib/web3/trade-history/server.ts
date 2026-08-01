@@ -11,9 +11,12 @@ const TRADE_HISTORY_WRITE_ABI = [
         type: "tuple",
         components: [
           { name: "user", type: "address" },
+          { name: "master", type: "address" },
+          { name: "follower", type: "address" },
           { name: "openTime", type: "uint64" },
           { name: "closedTime", type: "uint64" },
           { name: "direction", type: "uint8" },
+          { name: "source", type: "uint8" },
           { name: "quantityDecimals", type: "uint8" },
           { name: "priceDecimals", type: "uint8" },
           { name: "pnlDecimals", type: "uint8" },
@@ -24,6 +27,9 @@ const TRADE_HISTORY_WRITE_ABI = [
           { name: "closingPrice", type: "uint256" },
           { name: "pnl", type: "int256" },
           { name: "roi", type: "int256" },
+          { name: "grossPnl", type: "int256" },
+          { name: "masterReward", type: "int256" },
+          { name: "followerReward", type: "int256" },
         ],
       },
     ],
@@ -40,6 +46,9 @@ const TRADE_HISTORY_WRITE_ABI = [
       { name: "symbol", type: "bytes32", indexed: false },
       { name: "pnl", type: "int256", indexed: false },
       { name: "roi", type: "int256", indexed: false },
+      { name: "source", type: "uint8", indexed: false },
+      { name: "master", type: "address", indexed: false },
+      { name: "follower", type: "address", indexed: false },
     ],
   },
 ] as const;
@@ -63,9 +72,12 @@ const TRADE_HISTORY_READ_ABI = [
         type: "tuple",
         components: [
           { name: "user", type: "address" },
+          { name: "master", type: "address" },
+          { name: "follower", type: "address" },
           { name: "openTime", type: "uint64" },
           { name: "closedTime", type: "uint64" },
           { name: "direction", type: "uint8" },
+          { name: "source", type: "uint8" },
           { name: "quantityDecimals", type: "uint8" },
           { name: "priceDecimals", type: "uint8" },
           { name: "pnlDecimals", type: "uint8" },
@@ -76,6 +88,9 @@ const TRADE_HISTORY_READ_ABI = [
           { name: "closingPrice", type: "uint256" },
           { name: "pnl", type: "int256" },
           { name: "roi", type: "int256" },
+          { name: "grossPnl", type: "int256" },
+          { name: "masterReward", type: "int256" },
+          { name: "followerReward", type: "int256" },
         ],
       },
     ],
@@ -84,9 +99,12 @@ const TRADE_HISTORY_READ_ABI = [
 
 export type TradeHistoryRecordInput = {
   user: string;
+  master: string;
+  follower: string;
   openTime: number;
   closedTime: number;
   direction: number;
+  source: number;
   quantityDecimals: number;
   priceDecimals: number;
   pnlDecimals: number;
@@ -97,6 +115,9 @@ export type TradeHistoryRecordInput = {
   closingPrice: bigint;
   pnl: bigint;
   roi: bigint;
+  grossPnl: bigint;
+  masterReward: bigint;
+  followerReward: bigint;
 };
 
 export type StoredTradeHistoryRecord = {

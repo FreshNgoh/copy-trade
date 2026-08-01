@@ -16,9 +16,23 @@ import { cn } from "@/lib/utils";
 import React from "react";
 import { TPSLModal } from "./setting-profit";
 
+function shortAddress(address?: string | null) {
+  if (!address) return "-";
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function getPositionSourceLabel(position) {
+  if (position.trade_source === "MASTER_COPY") return "Master Copy";
+  if (position.trade_source === "COPY" || position.copied_from_master) {
+    return `Copied ${shortAddress(position.copied_from_master)}`;
+  }
+
+  return "Manual";
+}
+
 export function PositionsTable({
   activePositions,
-  activePair,
+  markPrices,
   setActivePositions,
   setClosedPositions,
 }) {
@@ -33,6 +47,7 @@ export function PositionsTable({
         <thead>
           <tr className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground border-b border-border">
             <th className="text-left px-4 py-2">Symbol</th>
+            <th className="text-left px-4 py-2">Source</th>
             <th className="text-left px-4 py-2">Direction</th>
             <th className="text-right px-4 py-2">Quantity</th>
             <th className="text-right px-4 py-2">Entry Price</th>
@@ -45,17 +60,25 @@ export function PositionsTable({
         </thead>
         <tbody>
           {activePositions.map((p) => {
-            const markPrice = activePair.price;
+            const markPrice = Number(markPrices[p.symbol] || 0);
+            const hasMarkPrice = Number.isFinite(markPrice) && markPrice > 0;
 
-            const pnl =
-              p.direction === "LONG"
+            const pnl = hasMarkPrice
+              ? p.direction === "LONG"
                 ? (markPrice - p.entry_price) * p.quantity
-                : (p.entry_price - markPrice) * p.quantity;
+                : (p.entry_price - markPrice) * p.quantity
+              : 0;
 
-            const roi = (pnl / (p.entry_price * p.quantity)) * p.leverage * 100;
+            const roi = hasMarkPrice
+              ? (pnl / (p.entry_price * p.quantity)) * p.leverage * 100
+              : 0;
 
             const handleClosePosition = async () => {
-              console.log(p);
+              if (!hasMarkPrice) {
+                toast.error(`Market price for ${p.symbol} is unavailable`);
+                return;
+              }
+
               try {
                 await closePositionApi({
                   position_id: p.position_id,
@@ -103,6 +126,9 @@ export function PositionsTable({
                 className="border-b border-border hover:bg-surface-hover"
               >
                 <td className="px-4 py-2.5 font-mono text-sm">{p.symbol}</td>
+                <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                  {getPositionSourceLabel(p)}
+                </td>
                 <td className="px-4 py-2.5">
                   <span
                     className={cn(
@@ -123,10 +149,12 @@ export function PositionsTable({
                   ${Number(p.entry_price).toFixed(2)}
                 </td>
                 <td className="px-4 py-2.5 text-right font-mono text-sm">
-                  ${Number(markPrice).toFixed(2)}
+                  {hasMarkPrice ? `$${markPrice.toFixed(2)}` : "—"}
                 </td>
                 <td className="px-4 py-2.5 text-right font-mono text-sm text-warning">
-                  ${Number(p.liquidation_price.toFixed(2))}
+                  {Number(p.liquidation_price) > 0
+                    ? `$${Number(p.liquidation_price).toFixed(2)}`
+                    : "—"}
                 </td>
                 <td
                   className={cn(
@@ -147,9 +175,14 @@ export function PositionsTable({
                 </td>
                 <td className="px-4 py-2.5 text-right">
                   <button
-                    className="text-[10px] uppercase font-mono border border-border px-2 py-1 hover:border-blue-500 hover:text-blue-300"
+                    disabled={!hasMarkPrice}
+                    title={
+                      hasMarkPrice
+                        ? undefined
+                        : `Market price for ${p.symbol} is unavailable`
+                    }
+                    className="text-[10px] uppercase font-mono border border-border px-2 py-1 hover:border-blue-500 hover:text-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => {
-                      console.log(p);
                       setSelectedPosition(p);
                       setOpenTPSL(true);
                     }}
@@ -160,7 +193,15 @@ export function PositionsTable({
                 <td className="px-4 py-2.5 text-right">
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <button className="text-[10px] uppercase font-mono border border-border px-2 py-1 hover:border-danger hover:text-danger">
+                      <button
+                        disabled={!hasMarkPrice}
+                        title={
+                          hasMarkPrice
+                            ? undefined
+                            : `Market price for ${p.symbol} is unavailable`
+                        }
+                        className="text-[10px] uppercase font-mono border border-border px-2 py-1 hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
+                      >
                         Close
                       </button>
                     </AlertDialogTrigger>
@@ -170,7 +211,7 @@ export function PositionsTable({
                         <AlertDialogTitle>Close Position</AlertDialogTitle>
 
                         <AlertDialogDescription>
-                          Are you sure to close this position at market price?
+                          Close {p.symbol} at ${markPrice.toFixed(2)}?
                         </AlertDialogDescription>
                       </AlertDialogHeader>
 
@@ -205,7 +246,7 @@ export function PositionsTable({
               ),
             );
           }}
-          midPrice={activePair.price}
+          midPrice={Number(markPrices[selectedPosition.symbol] || 0)}
         />
       )}
     </div>

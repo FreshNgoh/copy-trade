@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { DepositUSDC } from "@/components/wallet/deposit-usdc";
+import { WithdrawUSDC } from "@/components/wallet/withdraw-usdc";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   ensureTraderPortfolioApi,
@@ -15,8 +16,10 @@ import type {
   TraderDashboardPosition,
 } from "@/types/trader-dashboard";
 import { cn } from "@/lib/utils";
-import { Wallet, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
+import { WalletPerformanceChart } from "@/components/dashboard/wallet-performance-chart";
+import { BINANCE_TESTNET_BASE, SYMBOL_MAP } from "@/lib/trading/binance";
 
 const emptyDashboard: TraderDashboard = {
   trader_wallet_address: "",
@@ -24,9 +27,17 @@ const emptyDashboard: TraderDashboard = {
   stats: {
     totalPortfolioValue: 0,
     walletBalance: 0,
+    copyWalletBalance: 0,
+    totalWalletBalance: 0,
     realizedPnl: 0,
     marginUsed: 0,
+    manualMarginUsed: 0,
+    copyMarginUsed: 0,
     freeCollateral: 0,
+    copyFreeCollateral: 0,
+    copyLockedCollateral: 0,
+    copyActiveAllocation: 0,
+    copyTransferableBalance: 0,
     openPositionValue: 0,
     openPositionsCount: 0,
     openOrdersCount: 0,
@@ -34,6 +45,36 @@ const emptyDashboard: TraderDashboard = {
     followers: 0,
     winRate: 0,
     averageRoi: 0,
+    manualPerformance: {
+      closedTradesCount: 0,
+      openPositionsCount: 0,
+      realizedPnl: 0,
+      grossPnl: 0,
+      masterRewards: 0,
+      followerRewards: 0,
+      winRate: 0,
+      averageRoi: 0,
+    },
+    copyPerformance: {
+      closedTradesCount: 0,
+      openPositionsCount: 0,
+      realizedPnl: 0,
+      grossPnl: 0,
+      masterRewards: 0,
+      followerRewards: 0,
+      winRate: 0,
+      averageRoi: 0,
+    },
+    allPerformance: {
+      closedTradesCount: 0,
+      openPositionsCount: 0,
+      realizedPnl: 0,
+      grossPnl: 0,
+      masterRewards: 0,
+      followerRewards: 0,
+      winRate: 0,
+      averageRoi: 0,
+    },
   },
   activePositions: [],
   closedPositions: [],
@@ -61,12 +102,41 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function shortAddress(address?: string | null) {
+  if (!address) return "-";
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
 function getPositionNotional(position: TraderDashboardPosition) {
   return Number(position.entry_price) * Number(position.quantity);
 }
 
-function getPositionPnl(position: TraderDashboardPosition) {
-  return Number(position.Pnl ?? 0);
+function getPositionSourceLabel(position: TraderDashboardPosition) {
+  if (position.trade_source === "MASTER_COPY") {
+    return "Master Copy";
+  }
+
+  if (
+    position.trade_source === "COPY" ||
+    position.copied_from_master
+  ) {
+    return `Copied ${shortAddress(position.copied_from_master)}`;
+  }
+
+  return "Manual";
+}
+
+function getPositionPnl(
+  position: TraderDashboardPosition,
+  markPrices: Record<string, number>,
+) {
+  const markPrice = Number(markPrices[position.symbol] || 0);
+  if (markPrice <= 0) return Number(position.Pnl ?? 0);
+  const entryPrice = Number(position.entry_price);
+  const quantity = Number(position.quantity);
+  return position.direction === "LONG"
+    ? (markPrice - entryPrice) * quantity
+    : (entryPrice - markPrice) * quantity;
 }
 
 function getActivityTone(activity: TraderDashboardActivity) {
@@ -78,9 +148,13 @@ function getActivityTone(activity: TraderDashboardActivity) {
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
   const [depositOpen, setDepositOpen] = React.useState(false);
+  const [withdrawOpen, setWithdrawOpen] = React.useState(false);
   const [dashboard, setDashboard] =
     React.useState<TraderDashboard>(emptyDashboard);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [markPrices, setMarkPrices] = React.useState<Record<string, number>>(
+    {},
+  );
 
   const loadDashboard = React.useCallback(async () => {
     if (!address) {
@@ -108,8 +182,47 @@ export default function DashboardPage() {
     loadDashboard();
   }, [loadDashboard]);
 
-  const stats = dashboard.stats;
+  const activeSymbols = React.useMemo(
+    () => [
+      ...new Set(dashboard.activePositions.map((position) => position.symbol)),
+    ],
+    [dashboard.activePositions],
+  );
 
+  React.useEffect(() => {
+    if (!activeSymbols.length) {
+      setMarkPrices({});
+      return;
+    }
+    let cancelled = false;
+    const loadMarkPrices = async () => {
+      const prices = await Promise.all(
+        activeSymbols.map(async (symbol) => {
+          const ticker = SYMBOL_MAP[symbol];
+          if (!ticker) return [symbol, 0] as const;
+          try {
+            const response = await fetch(
+              `${BINANCE_TESTNET_BASE}/fapi/v1/ticker/price?symbol=${ticker}`,
+            );
+            if (!response.ok) return [symbol, 0] as const;
+            const data = await response.json();
+            return [symbol, Number(data.price || 0)] as const;
+          } catch {
+            return [symbol, 0] as const;
+          }
+        }),
+      );
+      if (!cancelled) setMarkPrices(Object.fromEntries(prices));
+    };
+    loadMarkPrices();
+    const interval = window.setInterval(loadMarkPrices, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeSymbols]);
+
+  const stats = dashboard.stats;
   return (
     <div data-testid="dashboard-page" className="bg-background min-h-screen">
       <div className="max-w-[1600px] mx-auto px-6 py-8 space-y-6">
@@ -125,13 +238,23 @@ export default function DashboardPage() {
             >
               Dashboard
             </h1>
-            {isConnected && (
-              <div className="font-mono text-xs text-muted-foreground mt-2">
-                Vault: {address?.slice(0, 6)}…{address?.slice(-4)}
-              </div>
-            )}
           </div>
           <div className="flex gap-2">
+            {dashboard.portfolio?.is_verified_master && (
+              <Link
+                href="/dashboard/followers"
+                className="inline-flex items-center gap-2 border border-border px-5 py-2.5 text-sm hover:border-accent hover:text-accent"
+              >
+                Followers ({stats.followers})
+              </Link>
+            )}
+            <Link
+              href="/dashboard/transfer"
+              data-testid="transfer-button"
+              className="inline-flex items-center gap-2 border border-accent/50 px-5 py-2.5 text-sm text-accent hover:bg-accent/10"
+            >
+              Transfer
+            </Link>
             <button
               data-testid="deposit-button"
               onClick={() => setDepositOpen(true)}
@@ -142,7 +265,7 @@ export default function DashboardPage() {
             </button>
             <button
               data-testid="withdraw-button"
-              onClick={() => toast.info("Withdraw initiated")}
+              onClick={() => setWithdrawOpen(true)}
               className="inline-flex items-center gap-2 border border-border px-5 py-2.5 hover:border-border-focus text-sm"
             >
               <ArrowUpFromLine className="w-4 h-4" />
@@ -165,43 +288,86 @@ export default function DashboardPage() {
           </SheetContent>
         </Sheet>
 
+        <Sheet open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-[440px] p-0 bg-surface border-border text-white overflow-y-auto"
+          >
+            <WithdrawUSDC
+              onSuccess={() => {
+                setWithdrawOpen(false);
+                loadDashboard();
+              }}
+            />
+          </SheetContent>
+        </Sheet>
+
         {/* Top stats grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border">
-          {[
-            {
-              label: "Total Portfolio Value",
-              value: formatUsd(stats.totalPortfolioValue),
-              mono: true,
-            },
-            {
-              label: "Realized PnL",
-              value: `${stats.realizedPnl >= 0 ? "+" : ""}${formatUsd(
-                stats.realizedPnl,
-              )}`,
-              mono: true,
-              accent: stats.realizedPnl >= 0 ? "text-success" : "text-danger",
-            },
-            {
-              label: "Margin Used",
-              value: formatUsd(stats.marginUsed),
-              mono: true,
-            },
-            {
-              label: "Free Collateral",
-              value: formatUsd(stats.freeCollateral),
-              mono: true,
-            },
-          ].map((s) => (
-            <div key={s.label} className="bg-surface p-5">
-              <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-2">
-                {s.label}
+          {(
+            [
+              {
+                label: "EST. Total Value",
+                value: formatUsd(stats.totalPortfolioValue),
+                mono: true,
+              },
+              {
+                label: "Manual Wallet",
+                value: formatUsd(stats.walletBalance),
+                mono: true,
+              },
+              {
+                label: "Copy Wallet",
+                value: formatUsd(stats.copyWalletBalance),
+                mono: true,
+              },
+              {
+                label: "Life Time PnL",
+                value: `${stats.realizedPnl >= 0 ? "+" : ""}${formatUsd(stats.realizedPnl)}`,
+                mono: true,
+                accent: stats.realizedPnl >= 0 ? "text-success" : "text-danger",
+                action: true,
+              },
+            ] as Array<{
+              label: string;
+              value: string;
+              mono: boolean;
+              accent?: string;
+              action?: boolean;
+            }>
+          ).map((s) => {
+            const content = (
+              <>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-2">
+                  {s.label}
+                </div>
+                <div className={cn("font-mono text-2xl", s.accent)}>
+                  {s.value}
+                </div>
+                {s.action && (
+                  <div className="mt-2 text-[9px] font-mono uppercase tracking-wider text-accent opacity-70 group-hover:opacity-100">
+                    Open analytics →
+                  </div>
+                )}
+              </>
+            );
+            return s.action ? (
+              <Link
+                key={s.label}
+                href="/dashboard/performance"
+                className="group bg-surface p-5 text-left hover:bg-surface-hover"
+              >
+                {content}
+              </Link>
+            ) : (
+              <div key={s.label} className="bg-surface p-5 text-left">
+                {content}
               </div>
-              <div className={cn("font-mono text-2xl", s.accent)}>
-                {s.value}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+
+        <WalletPerformanceChart dashboard={dashboard} />
 
         {/* Main grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -263,16 +429,16 @@ export default function DashboardPage() {
                       <td
                         className={cn(
                           "px-4 py-3 text-right font-mono text-sm",
-                          getPositionPnl(p) >= 0
+                          getPositionPnl(p, markPrices) >= 0
                             ? "text-success"
                             : "text-danger",
                         )}
                       >
-                        {getPositionPnl(p) >= 0 ? "+" : ""}
-                        {formatUsd(getPositionPnl(p))}
+                        {getPositionPnl(p, markPrices) >= 0 ? "+" : ""}
+                        {formatUsd(getPositionPnl(p, markPrices))}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
-                        Manual
+                        {getPositionSourceLabel(p)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
@@ -296,103 +462,6 @@ export default function DashboardPage() {
                   No active positions.
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Wallet summary */}
-          <div className="bg-surface border border-border p-5">
-            <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-4">
-              ▎ Vault
-            </div>
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 bg-accent/10 border border-accent/30 flex items-center justify-center">
-                <Wallet className="w-4 h-4 text-accent" />
-              </div>
-              <div>
-                <div className="font-mono text-sm">
-                  {isConnected
-                    ? `${address?.slice(0, 6)}…${address?.slice(-4)}`
-                    : "Not connected"}
-                </div>
-                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                  {isConnected ? "Sepolia Testnet" : "Connect to view"}
-                </div>
-              </div>
-            </div>
-            <div className="space-y-3 pt-3 border-t border-border">
-              <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                  USDC
-                </span>
-                <span className="font-mono text-sm">
-                  {stats.walletBalance.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                  Positions
-                </span>
-                <span className="font-mono text-sm">
-                  {stats.openPositionsCount}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[10px] uppercase font-mono text-muted-foreground">
-                  Followers
-                </span>
-                <span className="font-mono text-sm">
-                  {stats.followers.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Trader stats & activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-surface border border-border">
-            <div className="px-5 py-3 border-b border-border">
-              <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                ▎ Trader Performance
-              </span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border">
-              {[
-                {
-                  label: "Followers",
-                  value: stats.followers.toLocaleString(),
-                },
-                {
-                  label: "Win Rate",
-                  value: `${stats.winRate.toFixed(1)}%`,
-                },
-                {
-                  label: "Avg ROI",
-                  value: `${stats.averageRoi >= 0 ? "+" : ""}${stats.averageRoi.toFixed(2)}%`,
-                  accent:
-                    stats.averageRoi >= 0 ? "text-success" : "text-danger",
-                },
-                {
-                  label: "Open Orders",
-                  value: stats.openOrdersCount.toString(),
-                },
-              ].map((item) => (
-                <div key={item.label} className="bg-surface p-5">
-                  <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-2">
-                    {item.label}
-                  </div>
-                  <div className={cn("font-mono text-xl", item.accent)}>
-                    {item.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="px-5 py-4 border-t border-border text-xs text-muted-foreground">
-              Dashboard data is loaded from your `portfolio`, `positions`, and
-              `orders` tables.
             </div>
           </div>
 

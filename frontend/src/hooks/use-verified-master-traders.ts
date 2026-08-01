@@ -9,6 +9,8 @@ export function useVerifiedMasterTraders() {
     queryFn: getVerifiedMasterTradersApi,
     staleTime: 0,
     refetchOnMount: "always",
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     retry: 1,
   });
 }

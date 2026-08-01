@@ -12,7 +12,7 @@ export function VerifiedMasterBadge({ className }: { className?: string }) {
       )}
     >
       <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-      Verified Master
+      {/* Verified Master */}
     </span>
   );
 }

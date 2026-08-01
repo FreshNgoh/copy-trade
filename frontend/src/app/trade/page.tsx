@@ -5,6 +5,7 @@ import { CandlestickChart } from "@/components/trading/candlestick-chart";
 import { OrderBook } from "@/components/trading/order-book";
 import { TradePanel } from "@/components/trading/trade-panel";
 import { getClosedPositionsApi, getPositionsApi } from "@/lib/api/position-api";
+import { closePositionApi } from "@/lib/api/position-api";
 import { cn } from "@/lib/utils";
 import { BINANCE_TESTNET_BASE, SYMBOL_MAP } from "@/lib/trading/binance";
 import { PositionsTable } from "@/components/trading/position-table";
@@ -14,6 +15,11 @@ import { getLimitOrdersApi } from "@/lib/api/order-api";
 import { PairSelector } from "@/components/trading/pair-selector";
 import { useBinancePrice } from "@/hooks/use-binance-price";
 import { useAccount } from "wagmi";
+import { addNotification } from "@/lib/notifications";
+import { toast } from "sonner";
+import type { Position } from "@/types/position";
+import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
+import { Switch } from "@/components/ui/switch";
 
 const INITIAL_PAIRS = [
   { pair: "ETH/USDC", price: 0, change: 0, vol: "$0" },
@@ -22,6 +28,10 @@ const INITIAL_PAIRS = [
   { pair: "ARB/USDC", price: 0, change: 0, vol: "$0" },
   { pair: "LINK/USDC", price: 0, change: 0, vol: "$0" },
 ];
+
+function getTradeModeStorageKey(address: string) {
+  return `copy-trade:trade-mode:${address.toLowerCase()}`;
+}
 
 async function fetchTickerData(pair: string) {
   const symbol = SYMBOL_MAP[pair];
@@ -58,9 +68,13 @@ export default function TradePage() {
   const [tab, setTab] = React.useState<"positions" | "orders" | "history">(
     "positions",
   );
-  const [activePositions, setActivePositions] = React.useState([]);
+  const [activePositions, setActivePositions] = React.useState<Position[]>([]);
   const [closedPositions, setClosedPositions] = React.useState([]);
   const [orderPositions, setOrderPositions] = React.useState([]);
+  const [tradeMode, setTradeMode] = React.useState<"MANUAL" | "COPY">("MANUAL");
+  const [isVerifiedMaster, setIsVerifiedMaster] = React.useState(false);
+  const liquidationWarningsRef = React.useRef(new Set<string>());
+  const liquidationClosingRef = React.useRef(false);
 
   const loadPositions = React.useCallback(async () => {
     if (!address) {
@@ -79,6 +93,40 @@ export default function TradePage() {
   React.useEffect(() => {
     loadPositions();
   }, [loadPositions]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (!address) {
+      setIsVerifiedMaster(false);
+      setTradeMode("MANUAL");
+      return;
+    }
+
+    getTraderDashboardApi(address)
+      .then((dashboard) => {
+        if (cancelled) return;
+        const verified = Boolean(dashboard.portfolio?.is_verified_master);
+        setIsVerifiedMaster(verified);
+        if (verified) {
+          const savedMode = window.localStorage.getItem(
+            getTradeModeStorageKey(address),
+          );
+          setTradeMode(savedMode === "COPY" ? "COPY" : "MANUAL");
+        } else {
+          setTradeMode("MANUAL");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsVerifiedMaster(false);
+        setTradeMode("MANUAL");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
 
   React.useEffect(() => {
     const loadPairs = async () => {
@@ -156,6 +204,113 @@ export default function TradePage() {
   }, [midPrice]);
 
   React.useEffect(() => {
+    if (!address || !activePositions.length || liquidationClosingRef.current)
+      return;
+
+    const isCopyPosition = (position: Position) =>
+      position.trade_source === "MASTER_COPY" ||
+      position.trade_source === "COPY" ||
+      Boolean(position.copied_from_master);
+    const pricedPositions = activePositions
+      .map((position) => {
+        const market = pairs.find((item) => item.pair === position.symbol);
+        const markPrice = Number(market?.price || 0);
+        const entryPrice = Number(position.entry_price);
+        const liquidationPrice = Number(position.liquidation_price || 0);
+        const liquidationDistance = Math.abs(entryPrice - liquidationPrice);
+        if (markPrice <= 0 || liquidationPrice <= 0 || liquidationDistance <= 0)
+          return null;
+        const adverseMove =
+          position.direction === "LONG"
+            ? entryPrice - markPrice
+            : markPrice - entryPrice;
+        return {
+          position,
+          markPrice,
+          progress: adverseMove / liquidationDistance,
+        };
+      })
+      .filter(Boolean) as Array<{
+      position: Position;
+      markPrice: number;
+      progress: number;
+    }>;
+
+    pricedPositions.forEach(({ position, progress }) => {
+      if (
+        progress >= 0.9 &&
+        progress < 1 &&
+        !liquidationWarningsRef.current.has(position.position_id)
+      ) {
+        liquidationWarningsRef.current.add(position.position_id);
+        addNotification(address, {
+          type: "liquidation_warning",
+          title: "Liquidation risk above 90%",
+          message: `${position.symbol} is close to its liquidation price of $${Number(position.liquidation_price).toFixed(2)}.`,
+        });
+        toast.warning(`${position.symbol} is close to liquidation`);
+      }
+    });
+
+    const liquidatedWallets = new Set(
+      pricedPositions
+        .filter(({ progress }) => progress >= 1)
+        .map(({ position }) => (isCopyPosition(position) ? "copy" : "manual")),
+    );
+    if (!liquidatedWallets.size) return;
+    liquidationClosingRef.current = true;
+
+    const closeLiquidatedWalletPositions = async () => {
+      let closedCount = 0;
+      const positionsToClose = activePositions.filter((position) =>
+        liquidatedWallets.has(isCopyPosition(position) ? "copy" : "manual"),
+      );
+      for (const position of positionsToClose) {
+        const market = pairs.find((item) => item.pair === position.symbol);
+        const closingPrice = Number(market?.price || 0);
+        if (closingPrice <= 0) continue;
+        const quantity = Number(position.quantity);
+        const entryPrice = Number(position.entry_price);
+        const pnl =
+          position.direction === "LONG"
+            ? (closingPrice - entryPrice) * quantity
+            : (entryPrice - closingPrice) * quantity;
+        const margin = (entryPrice * quantity) / Number(position.leverage || 1);
+        const roi = margin > 0 ? (pnl / margin) * 100 : 0;
+        await closePositionApi({
+          position_id: position.position_id,
+          trader_wallet_address: position.trader_wallet_address,
+          closing_price: closingPrice,
+          updated_at: new Date().toISOString(),
+          status: "CLOSED",
+          Pnl: pnl,
+          Roi: roi,
+        });
+        closedCount += 1;
+      }
+      addNotification(address, {
+        type: "liquidation",
+        title: "Positions liquidated",
+        message: `${closedCount} open position${closedCount === 1 ? " was" : "s were"} in the affected wallet ${closedCount === 1 ? "was" : "were"} force-closed after its liquidation threshold was reached.`,
+      });
+      toast.error(
+        "Liquidation threshold reached. Positions in the affected wallet were closed.",
+      );
+      await Promise.all([loadPositions(), loadTradeHistory()]);
+    };
+
+    closeLiquidatedWalletPositions()
+      .catch((error) => {
+        toast.error(
+          error instanceof Error ? error.message : "Forced liquidation failed",
+        );
+      })
+      .finally(() => {
+        liquidationClosingRef.current = false;
+      });
+  }, [activePositions, address, loadPositions, loadTradeHistory, pairs]);
+
+  React.useEffect(() => {
     bookTickerRef.current = {
       bestBid,
       bestAsk,
@@ -176,6 +331,15 @@ export default function TradePage() {
           (Number(position.take_profit) > 0 || Number(position.stop_loss) > 0),
       ),
     [activePair.pair, activePositions],
+  );
+
+  const markPrices = React.useMemo(
+    () =>
+      Object.fromEntries([
+        ...pairs.map((market) => [market.pair, Number(market.price)]),
+        [activePair.pair, Number(activePair.price)],
+      ]),
+    [activePair, pairs],
   );
 
   React.useEffect(() => {
@@ -252,9 +416,10 @@ export default function TradePage() {
               )}
             >
               $
-              {activePair.price < 1
-                ? activePair.price.toFixed(6)
-                : activePair.price.toLocaleString()}
+              {activePair.price.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </div>
           </div>
           <div>
@@ -290,6 +455,31 @@ export default function TradePage() {
             <div className="font-mono text-sm">$184.2M</div>
           </div>
         </div>
+
+        {isVerifiedMaster && (
+          <div className="ml-auto flex items-center gap-3">
+            <div className="text-right">
+              <div className="font-mono text-[10px] uppercase text-muted-foreground">
+                Copy Mode
+              </div>
+            </div>
+            <Switch
+              checked={tradeMode === "COPY"}
+              onCheckedChange={(checked) => {
+                const nextMode = checked ? "COPY" : "MANUAL";
+                setTradeMode(nextMode);
+                if (address) {
+                  window.localStorage.setItem(
+                    getTradeModeStorageKey(address),
+                    nextMode,
+                  );
+                }
+              }}
+              aria-label="Toggle copy trading mode"
+              className="data-[state=checked]:bg-accent"
+            />
+          </div>
+        )}
       </div>
 
       {/* Grid: Chart | OrderBook | TradePanel */}
@@ -306,6 +496,7 @@ export default function TradePage() {
             midPrice={activePair.price}
             onPositionCreated={loadPositions}
             onOrderCreated={loadLimitOrder}
+            tradeMode={tradeMode}
           />
         </div>
       </div>
@@ -345,7 +536,7 @@ export default function TradePage() {
         {tab === "positions" && (
           <PositionsTable
             activePositions={activePositions}
-            activePair={activePair}
+            markPrices={markPrices}
             setActivePositions={setActivePositions}
             setClosedPositions={setClosedPositions}
           />

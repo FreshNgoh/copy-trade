@@ -5,7 +5,7 @@ export function formatScaledNumber(value: bigint, decimals: number): string {
 }
 
 export function formatPrice(value: bigint, decimals: number): string {
-  return `$${formatScaledNumber(value, decimals)}`;
+  return `$${Number(formatScaledNumber(value, decimals)).toFixed(2)}`;
 }
 
 export function formatQuantity(value: bigint, decimals: number, symbol: string): string {

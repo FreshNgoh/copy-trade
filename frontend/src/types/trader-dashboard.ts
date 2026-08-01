@@ -11,21 +11,45 @@ export interface TraderDashboardPortfolio {
   trader_id: string;
   trader_wallet_address: string;
   wallet_balance: number;
+  copy_wallet_balance: number;
   positions: number;
   followers: number;
+  is_verified_master?: boolean;
 }
 
 export interface TraderDashboardStats {
   totalPortfolioValue: number;
   walletBalance: number;
+  copyWalletBalance: number;
+  totalWalletBalance: number;
   realizedPnl: number;
   marginUsed: number;
+  manualMarginUsed: number;
+  copyMarginUsed: number;
   freeCollateral: number;
+  copyFreeCollateral: number;
+  copyLockedCollateral: number;
+  copyActiveAllocation: number;
+  copyTransferableBalance: number;
   openPositionValue: number;
   openPositionsCount: number;
   openOrdersCount: number;
   closedTradesCount: number;
   followers: number;
+  winRate: number;
+  averageRoi: number;
+  manualPerformance: TraderDashboardPerformanceStats;
+  copyPerformance: TraderDashboardPerformanceStats;
+  allPerformance: TraderDashboardPerformanceStats;
+}
+
+export interface TraderDashboardPerformanceStats {
+  closedTradesCount: number;
+  openPositionsCount: number;
+  realizedPnl: number;
+  grossPnl: number;
+  masterRewards: number;
+  followerRewards: number;
   winRate: number;
   averageRoi: number;
 }

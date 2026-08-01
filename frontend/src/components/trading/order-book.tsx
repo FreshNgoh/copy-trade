@@ -137,7 +137,10 @@ export function OrderBook({
                 }}
               />
               <span className="relative text-danger">
-                {a.price.toLocaleString()}
+                {a.price.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </span>
               <span className="relative text-right">{a.size.toFixed(4)}</span>
               <span className="relative text-right text-muted-foreground">
@@ -174,7 +177,10 @@ export function OrderBook({
               }}
             />
             <span className="relative text-success">
-              {b.price.toLocaleString()}
+              {b.price.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </span>
             <span className="relative text-right">{b.size.toFixed(4)}</span>
             <span className="relative text-right text-muted-foreground">
