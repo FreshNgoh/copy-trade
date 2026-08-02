@@ -70,5 +70,4 @@ export interface TraderDashboard {
   activePositions: TraderDashboardPosition[];
   closedPositions: TraderDashboardPosition[];
   openOrders: LimitOrder[];
-  recentActivity: TraderDashboardActivity[];
 }

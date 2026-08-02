@@ -34,7 +34,7 @@ export function PositionsTable({
   activePositions,
   markPrices,
   setActivePositions,
-  setClosedPositions,
+  onTradeHistoryRefresh,
 }) {
   const [openTPSL, setOpenTPSL] = React.useState(false);
   const [selectedPosition, setSelectedPosition] = React.useState(null);
@@ -97,18 +97,7 @@ export function PositionsTable({
                   ),
                 );
 
-                // show in trade history
-                setClosedPositions((prev) => [
-                  {
-                    ...p,
-                    status: "CLOSED",
-                    closing_price: markPrice,
-                    Pnl: pnl,
-                    Roi: roi,
-                    updated_at: new Date(),
-                  },
-                  ...prev,
-                ]);
+                await onTradeHistoryRefresh?.();
 
                 toast.success("Position closed successfully");
               } catch (error) {

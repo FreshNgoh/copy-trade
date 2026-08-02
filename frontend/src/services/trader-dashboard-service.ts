@@ -2,12 +2,10 @@ import { traderDashboardRepository } from "@/repositories/trader-dashboard-repos
 import { positionRepository } from "@/repositories/position-repository";
 import type {
   TraderDashboard,
-  TraderDashboardActivity,
   TraderDashboardPerformanceStats,
   TraderDashboardPortfolio,
   TraderDashboardPosition,
 } from "@/types/trader-dashboard";
-import type { LimitOrder } from "@/types/limit-order";
 import { calculateWalletLiquidationPrices } from "@/lib/trading/calculation";
 import { copyTradingRepository } from "@/repositories/copy-trading-repository";
 
@@ -90,41 +88,6 @@ function buildPerformanceStats(
   };
 }
 
-function createActivityFromPosition(
-  position: TraderDashboardPosition,
-): TraderDashboardActivity {
-  const isClosed = position.status === "CLOSED";
-  const pnl = toNumber(position.Pnl);
-  const closeText =
-    pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`;
-
-  return {
-    id: position.position_id,
-    type: isClosed ? "POSITION_CLOSE" : "POSITION_OPEN",
-    symbol: position.symbol,
-    direction: position.direction,
-    detail: isClosed
-      ? `Closed ${position.direction} ${position.symbol} ${closeText}`
-      : `Opened ${position.direction} ${position.symbol} @ $${toNumber(
-          position.entry_price,
-        ).toFixed(2)}`,
-    created_at: position.updated_at || position.created_at,
-  };
-}
-
-function createActivityFromOrder(order: LimitOrder): TraderDashboardActivity {
-  return {
-    id: order.order_id,
-    type: "ORDER_OPEN",
-    symbol: order.symbol,
-    direction: order.direction,
-    detail: `Placed ${order.direction} ${order.symbol} limit @ $${toNumber(
-      order.limit_price,
-    ).toFixed(2)}`,
-    created_at: order.created_at,
-  };
-}
-
 export async function getTraderDashboard(
   traderWalletAddress: string,
 ): Promise<TraderDashboard> {
@@ -200,16 +163,6 @@ export async function getTraderDashboard(
     { manual: walletBalance, copy: copyWalletBalance },
   );
 
-  const recentActivity = [
-    ...positions.map(createActivityFromPosition),
-    ...openOrders.map(createActivityFromOrder),
-  ]
-    .sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-    )
-    .slice(0, 5);
-
   return {
     trader_wallet_address: traderWalletAddress,
     portfolio: portfolioData,
@@ -243,7 +196,6 @@ export async function getTraderDashboard(
     activePositions: activePositionsWithLiquidation,
     closedPositions,
     openOrders,
-    recentActivity,
   };
 }
 

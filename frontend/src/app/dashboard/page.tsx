@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
+import { sepolia } from "wagmi/chains";
 import { DepositUSDC } from "@/components/wallet/deposit-usdc";
 import { WithdrawUSDC } from "@/components/wallet/withdraw-usdc";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -20,6 +21,12 @@ import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
 import { WalletPerformanceChart } from "@/components/dashboard/wallet-performance-chart";
 import { BINANCE_TESTNET_BASE, SYMBOL_MAP } from "@/lib/trading/binance";
+import { readUserTradeHistoryRecords } from "@/lib/web3/trade-history/client";
+import { TRADE_HISTORY_CONTRACT_ADDRESS } from "@/lib/web3/trade-history/constants";
+import {
+  bytes32ToString,
+  formatPnl,
+} from "@/lib/web3/trade-history/format";
 
 const emptyDashboard: TraderDashboard = {
   trader_wallet_address: "",
@@ -79,7 +86,6 @@ const emptyDashboard: TraderDashboard = {
   activePositions: [],
   closedPositions: [],
   openOrders: [],
-  recentActivity: [],
 };
 
 function formatUsd(value: number) {
@@ -147,11 +153,17 @@ function getActivityTone(activity: TraderDashboardActivity) {
 
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
+  const publicClient = usePublicClient({ chainId: sepolia.id });
   const [depositOpen, setDepositOpen] = React.useState(false);
   const [withdrawOpen, setWithdrawOpen] = React.useState(false);
   const [dashboard, setDashboard] =
     React.useState<TraderDashboard>(emptyDashboard);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [recentActivity, setRecentActivity] = React.useState<
+    TraderDashboardActivity[]
+  >([]);
+  const [isActivityLoading, setIsActivityLoading] = React.useState(false);
+  const [activityError, setActivityError] = React.useState<string | null>(null);
   const [markPrices, setMarkPrices] = React.useState<Record<string, number>>(
     {},
   );
@@ -181,6 +193,57 @@ export default function DashboardPage() {
   React.useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
+
+  const loadOnChainRecentActivity = React.useCallback(async () => {
+    if (!address || !publicClient || !TRADE_HISTORY_CONTRACT_ADDRESS) {
+      setRecentActivity([]);
+      setActivityError(null);
+      return;
+    }
+
+    setIsActivityLoading(true);
+    setActivityError(null);
+
+    try {
+      const records = await readUserTradeHistoryRecords({
+        publicClient,
+        user: address,
+        limit: 5,
+      });
+      const activity = records.toReversed().map((record) => {
+        const symbol = bytes32ToString(record.symbol);
+        const direction = record.direction === 0 ? "LONG" : "SHORT";
+        const pnl = formatPnl(record.pnl, record.pnlDecimals);
+        const closedAt = new Date(
+          Number(record.closedTime) * 1000,
+        ).toISOString();
+
+        return {
+          id: record.tradeId.toString(),
+          type: "POSITION_CLOSE",
+          symbol,
+          direction,
+          detail: `Closed ${direction} ${symbol} ${pnl}`,
+          created_at: closedAt,
+        } satisfies TraderDashboardActivity;
+      });
+
+      setRecentActivity(activity);
+    } catch (error) {
+      console.error("Failed to fetch on-chain recent activity:", error);
+      setActivityError(
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch on-chain recent activity",
+      );
+    } finally {
+      setIsActivityLoading(false);
+    }
+  }, [address, publicClient]);
+
+  React.useEffect(() => {
+    loadOnChainRecentActivity();
+  }, [loadOnChainRecentActivity]);
 
   const activeSymbols = React.useMemo(
     () => [
@@ -472,7 +535,12 @@ export default function DashboardPage() {
               </span>
             </div>
             <div data-testid="activity-feed">
-              {dashboard.recentActivity.map((a) => (
+              {activityError && (
+                <div className="px-5 py-4 text-sm text-danger">
+                  {activityError}
+                </div>
+              )}
+              {recentActivity.map((a) => (
                 <div
                   key={a.id}
                   className="px-5 py-3 border-b border-border last:border-0 text-xs"
@@ -497,9 +565,16 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ))}
-              {!isLoading && dashboard.recentActivity.length === 0 && (
+              {!activityError &&
+                !isActivityLoading &&
+                recentActivity.length === 0 && (
+                  <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+                    No on-chain recent activity.
+                  </div>
+                )}
+              {isActivityLoading && recentActivity.length === 0 && (
                 <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-                  No recent activity.
+                  Loading on-chain activity.
                 </div>
               )}
             </div>

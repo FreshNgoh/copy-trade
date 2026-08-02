@@ -4,7 +4,7 @@ import * as React from "react";
 import { CandlestickChart } from "@/components/trading/candlestick-chart";
 import { OrderBook } from "@/components/trading/order-book";
 import { TradePanel } from "@/components/trading/trade-panel";
-import { getClosedPositionsApi, getPositionsApi } from "@/lib/api/position-api";
+import { getPositionsApi } from "@/lib/api/position-api";
 import { closePositionApi } from "@/lib/api/position-api";
 import { cn } from "@/lib/utils";
 import { BINANCE_TESTNET_BASE, SYMBOL_MAP } from "@/lib/trading/binance";
@@ -14,12 +14,17 @@ import { LimitOrder } from "@/components/trading/limit-order";
 import { getLimitOrdersApi } from "@/lib/api/order-api";
 import { PairSelector } from "@/components/trading/pair-selector";
 import { useBinancePrice } from "@/hooks/use-binance-price";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
+import { sepolia } from "wagmi/chains";
+import { ExternalLink } from "lucide-react";
 import { addNotification } from "@/lib/notifications";
 import { toast } from "sonner";
 import type { Position } from "@/types/position";
 import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
 import { Switch } from "@/components/ui/switch";
+import { readUserTradeHistoryRecords } from "@/lib/web3/trade-history/client";
+import { TRADE_HISTORY_CONTRACT_ADDRESS } from "@/lib/web3/trade-history/constants";
+import type { OnChainTradeRecord } from "@/lib/web3/trade-history/types";
 
 const INITIAL_PAIRS = [
   { pair: "ETH/USDC", price: 0, change: 0, vol: "$0" },
@@ -31,6 +36,10 @@ const INITIAL_PAIRS = [
 
 function getTradeModeStorageKey(address: string) {
   return `copy-trade:trade-mode:${address.toLowerCase()}`;
+}
+
+function shortAddress(address: string) {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
 async function fetchTickerData(pair: string) {
@@ -63,13 +72,21 @@ async function fetchAllTickers() {
 
 export default function TradePage() {
   const { address } = useAccount();
+  const publicClient = usePublicClient({ chainId: sepolia.id });
   const [pairs, setPairs] = React.useState(INITIAL_PAIRS);
   const [activePair, setActivePair] = React.useState(INITIAL_PAIRS[1]);
   const [tab, setTab] = React.useState<"positions" | "orders" | "history">(
     "positions",
   );
   const [activePositions, setActivePositions] = React.useState<Position[]>([]);
-  const [closedPositions, setClosedPositions] = React.useState([]);
+  const [tradeHistoryRecords, setTradeHistoryRecords] = React.useState<
+    OnChainTradeRecord[]
+  >([]);
+  const [isTradeHistoryLoading, setIsTradeHistoryLoading] =
+    React.useState(false);
+  const [tradeHistoryError, setTradeHistoryError] = React.useState<
+    string | null
+  >(null);
   const [orderPositions, setOrderPositions] = React.useState([]);
   const [tradeMode, setTradeMode] = React.useState<"MANUAL" | "COPY">("MANUAL");
   const [isVerifiedMaster, setIsVerifiedMaster] = React.useState(false);
@@ -148,18 +165,32 @@ export default function TradePage() {
   }, []);
 
   const loadTradeHistory = React.useCallback(async () => {
-    if (!address) {
-      setClosedPositions([]);
+    if (!address || !publicClient || !TRADE_HISTORY_CONTRACT_ADDRESS) {
+      setTradeHistoryRecords([]);
+      setTradeHistoryError(null);
       return;
     }
 
+    setIsTradeHistoryLoading(true);
+    setTradeHistoryError(null);
+
     try {
-      const positions = await getClosedPositionsApi(address);
-      setClosedPositions(positions);
+      const records = await readUserTradeHistoryRecords({
+        publicClient,
+        user: address,
+      });
+      setTradeHistoryRecords(records.toReversed());
     } catch (error) {
-      console.error("Failed to fetch trade history:", error);
+      console.error("Failed to fetch on-chain trade history:", error);
+      setTradeHistoryError(
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch on-chain trade history",
+      );
+    } finally {
+      setIsTradeHistoryLoading(false);
     }
-  }, [address]);
+  }, [address, publicClient]);
 
   React.useEffect(() => {
     loadTradeHistory();
@@ -341,6 +372,9 @@ export default function TradePage() {
       ]),
     [activePair, pairs],
   );
+  const tradeHistoryContractUrl = TRADE_HISTORY_CONTRACT_ADDRESS
+    ? `https://sepolia.etherscan.io/address/${TRADE_HISTORY_CONTRACT_ADDRESS}`
+    : null;
 
   React.useEffect(() => {
     if (!hasOpenOrdersForActivePair && !hasTriggerablePositionsForActivePair) {
@@ -538,7 +572,7 @@ export default function TradePage() {
             activePositions={activePositions}
             markPrices={markPrices}
             setActivePositions={setActivePositions}
-            setClosedPositions={setClosedPositions}
+            onTradeHistoryRefresh={loadTradeHistory}
           />
         )}
 
@@ -550,7 +584,33 @@ export default function TradePage() {
         )}
 
         {tab === "history" && (
-          <HistoryTable closedPositions={closedPositions} />
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                On-chain records from TradeHistory
+              </div>
+              {tradeHistoryContractUrl ? (
+                <a
+                  href={tradeHistoryContractUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-accent transition-colors hover:text-white"
+                >
+                  View Contract {shortAddress(TRADE_HISTORY_CONTRACT_ADDRESS)}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : (
+                <div className="font-mono text-[10px] uppercase tracking-wider text-danger">
+                  Missing TradeHistory contract address
+                </div>
+              )}
+            </div>
+            <HistoryTable
+              records={tradeHistoryRecords}
+              isLoading={isTradeHistoryLoading}
+              error={tradeHistoryError}
+            />
+          </>
         )}
       </div>
     </div>
