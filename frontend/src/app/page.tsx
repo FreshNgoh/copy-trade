@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAccount } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { ArrowRight, Shield, Zap, Eye, Lock, TrendingUp } from "lucide-react";
+import { ArrowRight, Shield, Zap, Eye, Lock } from "lucide-react";
 import { TRADERS, PLATFORM_STATS } from "@/lib/mock-data";
 import { TraderCard } from "@/components/trader/trader-card";
 
@@ -301,52 +301,6 @@ export default function LandingPage() {
             {topTraders.map((t) => (
               <TraderCard key={t.id} trader={t} />
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Revenue / Become trader CTA */}
-      <section className="relative border-t border-border">
-        <div className="max-w-[1600px] mx-auto px-6 py-24 grid grid-cols-12 gap-6">
-          <div className="col-span-12 lg:col-span-7 border border-border p-10 bg-surface relative overflow-hidden">
-            <TrendingUp className="absolute -top-4 -right-4 w-40 h-40 text-accent opacity-10" />
-            <div className="text-[10px] uppercase tracking-[0.2em] font-mono text-muted-foreground mb-4">
-              ▎ For Traders
-            </div>
-            <h3 className="font-heading text-3xl lg:text-4xl font-bold tracking-tighter mb-4">
-              Earn from your edge.
-            </h3>
-            <p className="text-muted-foreground mb-8 max-w-lg leading-relaxed">
-              Top-performing wallets automatically earn 15% performance fees
-              from copied profits. Build a public on-chain track record. Get
-              followed.
-            </p>
-            <Link
-              href="/become-trader"
-              data-testid="landing-become-trader"
-              className="inline-flex items-center gap-2 bg-accent text-accent-foreground px-6 py-3 font-medium hover:brightness-110 transition-all"
-            >
-              Apply as Trader <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-          <div className="col-span-12 lg:col-span-5 border border-border p-10 bg-surface">
-            <div className="text-[10px] uppercase tracking-[0.2em] font-mono text-muted-foreground mb-4">
-              ▎ For Followers
-            </div>
-            <h3 className="font-heading text-2xl lg:text-3xl font-bold tracking-tighter mb-4">
-              Outsource the edge.
-            </h3>
-            <p className="text-muted-foreground mb-8 leading-relaxed">
-              Set your allocation, your stop-loss, your daily limits. Then
-              sleep.
-            </p>
-            <Link
-              href="/dashboard"
-              data-testid="landing-go-dashboard"
-              className="inline-flex items-center gap-2 border border-border px-6 py-3 hover:border-border-focus transition-colors"
-            >
-              Open Dashboard <ArrowRight className="w-4 h-4" />
-            </Link>
           </div>
         </div>
       </section>

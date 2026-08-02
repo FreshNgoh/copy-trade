@@ -18,8 +18,6 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/explore", label: "Explore" },
   { href: "/trade", label: "Trade" },
-  { href: "/trade-history", label: "History" },
-  { href: "/become-trader", label: "Become a Trader" },
 ];
 
 export function Navbar() {

@@ -1,35 +1,52 @@
 "use client";
 
 import * as React from "react";
-import type { TraderDashboard, TraderDashboardPosition } from "@/types/trader-dashboard";
 import { cn } from "@/lib/utils";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  bytes32ToString,
+  formatScaledNumber,
+} from "@/lib/web3/trade-history/format";
+import type { OnChainTradeRecord } from "@/lib/web3/trade-history/types";
+import { TRADE_HISTORY_CONTRACT_ADDRESS } from "@/lib/web3/trade-history/constants";
 
 type View = "all" | "manual" | "copy";
 
-function isCopy(position: TraderDashboardPosition) {
-  return (
-    position.trade_source === "MASTER_COPY" ||
-    position.trade_source === "COPY" ||
-    Boolean(position.copied_from_master)
-  );
+function isCopy(record: OnChainTradeRecord) {
+  return record.source !== 0;
 }
 
-function pnl(position: TraderDashboardPosition) {
-  return isCopy(position)
-    ? Number(position.follower_reward ?? position.Pnl ?? 0)
-    : Number(position.Pnl ?? 0);
+function pnl(record: OnChainTradeRecord) {
+  return Number(formatScaledNumber(record.pnl, record.pnlDecimals));
+}
+
+function roi(record: OnChainTradeRecord) {
+  return Number(formatScaledNumber(record.roi, record.roiDecimals));
+}
+
+function symbol(record: OnChainTradeRecord) {
+  return bytes32ToString(record.symbol);
+}
+
+function direction(record: OnChainTradeRecord) {
+  return record.direction === 0 ? "LONG" : "SHORT";
 }
 
 function usd(value: number) {
   return `${value < 0 ? "-" : ""}$${Math.abs(value).toFixed(2)}`;
 }
 
-export function TradePerformanceAnalysis({ dashboard }: { dashboard: TraderDashboard }) {
+export function TradePerformanceAnalysis({
+  records,
+  isLoading = false,
+}: {
+  records: OnChainTradeRecord[];
+  isLoading?: boolean;
+}) {
   const [view, setView] = React.useState<View>("all");
   const trades = React.useMemo(
-    () => dashboard.closedPositions.filter((trade) => view === "all" || (view === "copy") === isCopy(trade)),
-    [dashboard.closedPositions, view],
+    () => records.filter((trade) => view === "all" || (view === "copy") === isCopy(trade)),
+    [records, view],
   );
 
   const analysis = React.useMemo(() => {
@@ -45,30 +62,33 @@ export function TradePerformanceAnalysis({ dashboard }: { dashboard: TraderDashb
       peak = Math.max(peak, equity);
       maxDrawdown = Math.max(maxDrawdown, peak - equity);
     });
-    const bySymbol = new Map<string, TraderDashboardPosition[]>();
-    trades.forEach((trade) => bySymbol.set(trade.symbol, [...(bySymbol.get(trade.symbol) ?? []), trade]));
-    const coins = [...bySymbol.entries()].map(([symbol, symbolTrades]) => {
+    const bySymbol = new Map<string, OnChainTradeRecord[]>();
+    trades.forEach((trade) => {
+      const tradeSymbol = symbol(trade);
+      bySymbol.set(tradeSymbol, [...(bySymbol.get(tradeSymbol) ?? []), trade]);
+    });
+    const coins = [...bySymbol.entries()].map(([tradeSymbol, symbolTrades]) => {
       const symbolWins = symbolTrades.filter((trade) => pnl(trade) > 0).length;
       return {
-        symbol,
+        symbol: tradeSymbol,
         trades: symbolTrades.length,
         winRate: symbolTrades.length ? (symbolWins / symbolTrades.length) * 100 : 0,
-        roi: symbolTrades.length ? symbolTrades.reduce((sum, trade) => sum + Number(trade.Roi ?? 0), 0) / symbolTrades.length : 0,
+        roi: symbolTrades.length ? symbolTrades.reduce((sum, trade) => sum + roi(trade), 0) / symbolTrades.length : 0,
         pnl: symbolTrades.reduce((sum, trade) => sum + pnl(trade), 0),
       };
     }).sort((a, b) => b.trades - a.trades);
     return {
       winRate: trades.length ? (wins.length / trades.length) * 100 : 0,
-      avgRoi: trades.length ? trades.reduce((sum, trade) => sum + Number(trade.Roi ?? 0), 0) / trades.length : 0,
+      avgRoi: trades.length ? trades.reduce((sum, trade) => sum + roi(trade), 0) / trades.length : 0,
       netPnl: trades.reduce((sum, trade) => sum + pnl(trade), 0),
       profitFactor: grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0,
       maxDrawdown,
       wins: wins.length,
       losses: losses.length,
-      best: trades.reduce<TraderDashboardPosition | null>((best, trade) => !best || pnl(trade) > pnl(best) ? trade : best, null),
-      worst: trades.reduce<TraderDashboardPosition | null>((worst, trade) => !worst || pnl(trade) < pnl(worst) ? trade : worst, null),
-      longs: trades.filter((trade) => trade.direction === "LONG").length,
-      shorts: trades.filter((trade) => trade.direction === "SHORT").length,
+      best: trades.reduce<OnChainTradeRecord | null>((best, trade) => !best || pnl(trade) > pnl(best) ? trade : best, null),
+      worst: trades.reduce<OnChainTradeRecord | null>((worst, trade) => !worst || pnl(trade) < pnl(worst) ? trade : worst, null),
+      longs: trades.filter((trade) => direction(trade) === "LONG").length,
+      shorts: trades.filter((trade) => direction(trade) === "SHORT").length,
       coins,
     };
   }, [trades]);
@@ -104,15 +124,36 @@ export function TradePerformanceAnalysis({ dashboard }: { dashboard: TraderDashb
             <PerformancePie title="Direction" data={[{ name: "Long", value: analysis.longs, color: "#00e5ff" }, { name: "Short", value: analysis.shorts, color: "#f59e0b" }]} />
           </div>
           <div className="space-y-3 border-t border-border p-4 text-xs">
-            <div><div className="text-[9px] font-mono uppercase text-muted-foreground">Best trade</div><div className="mt-1 flex justify-between gap-3"><span>{analysis.best?.symbol ?? "—"}</span><span className="font-mono text-success">{analysis.best ? `+${usd(pnl(analysis.best))}` : "—"}</span></div></div>
-            <div><div className="text-[9px] font-mono uppercase text-muted-foreground">Worst trade</div><div className="mt-1 flex justify-between gap-3"><span>{analysis.worst?.symbol ?? "—"}</span><span className="font-mono text-danger">{analysis.worst ? usd(pnl(analysis.worst)) : "—"}</span></div></div>
+            <div><div className="text-[9px] font-mono uppercase text-muted-foreground">Best trade</div><div className="mt-1 flex justify-between gap-3"><span>{analysis.best ? symbol(analysis.best) : "—"}</span><span className="font-mono text-success">{analysis.best ? `+${usd(pnl(analysis.best))}` : "—"}</span></div></div>
+            <div><div className="text-[9px] font-mono uppercase text-muted-foreground">Worst trade</div><div className="mt-1 flex justify-between gap-3"><span>{analysis.worst ? symbol(analysis.worst) : "—"}</span><span className="font-mono text-danger">{analysis.worst ? usd(pnl(analysis.worst)) : "—"}</span></div></div>
           </div>
         </section>
       </div>
 
       <section className="border border-border bg-surface">
-        <div className="border-b border-border px-4 py-3 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Closed trade breakdown</div>
-        <div className="max-h-60 overflow-auto"><table className="w-full"><tbody>{trades.slice(0, 20).map((trade) => <tr key={trade.position_id} className="border-b border-border text-xs last:border-0"><td className="px-4 py-3 font-mono text-accent">{trade.symbol}</td><td className="px-4 py-3 font-mono">{trade.direction}</td><td className="px-4 py-3 text-muted-foreground">{isCopy(trade) ? "Copy" : "Manual"}</td><td className={cn("px-4 py-3 text-right font-mono", Number(trade.Roi ?? 0) >= 0 ? "text-success" : "text-danger")}>{Number(trade.Roi ?? 0) >= 0 ? "+" : ""}{Number(trade.Roi ?? 0).toFixed(2)}%</td><td className={cn("px-4 py-3 text-right font-mono", pnl(trade) >= 0 ? "text-success" : "text-danger")}>{pnl(trade) >= 0 ? "+" : ""}{usd(pnl(trade))}</td></tr>)}</tbody></table></div>
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Closed trade breakdown</div>
+          {TRADE_HISTORY_CONTRACT_ADDRESS && (
+            <a
+              href={`https://sepolia.etherscan.io/address/${TRADE_HISTORY_CONTRACT_ADDRESS}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-[10px] uppercase tracking-wider text-accent hover:text-white"
+            >
+              View in Etherscan
+            </a>
+          )}
+        </div>
+        <div className="max-h-60 overflow-auto"><table className="w-full"><thead><tr className="border-b border-border text-[9px] font-mono uppercase tracking-wider text-muted-foreground"><th className="px-4 py-2.5 text-left">Block</th><th className="px-4 py-2.5 text-left">Market</th><th className="px-4 py-2.5 text-left">Direction</th><th className="px-4 py-2.5 text-left">Source</th><th className="px-4 py-2.5 text-right">ROI</th><th className="px-4 py-2.5 text-right">PnL</th></tr></thead><tbody>{trades.slice(0, 20).map((trade) => (
+            <tr key={trade.tradeId.toString()} className="border-b border-border text-xs last:border-0">
+              <td className="px-4 py-3 font-mono text-muted-foreground">{trade.blockNumber ? trade.blockNumber.toString() : "-"}</td>
+              <td className="px-4 py-3 font-mono text-accent">{symbol(trade)}</td>
+              <td className="px-4 py-3 font-mono">{direction(trade)}</td>
+              <td className="px-4 py-3 text-muted-foreground">{isCopy(trade) ? "Copy" : "Manual"}</td>
+              <td className={cn("px-4 py-3 text-right font-mono", roi(trade) >= 0 ? "text-success" : "text-danger")}>{roi(trade) >= 0 ? "+" : ""}{roi(trade).toFixed(2)}%</td>
+              <td className={cn("px-4 py-3 text-right font-mono", pnl(trade) >= 0 ? "text-success" : "text-danger")}>{pnl(trade) >= 0 ? "+" : ""}{usd(pnl(trade))}</td>
+            </tr>
+          ))}</tbody></table>{isLoading && trades.length === 0 && <div className="px-4 py-10 text-center text-xs text-muted-foreground">Loading on-chain performance.</div>}</div>
       </section>
     </div>
   );
