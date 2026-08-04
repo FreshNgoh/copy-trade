@@ -19,6 +19,9 @@ export type ClosedOrder = {
   roi: string | number;
   openTime: string | Date;
   closedTime: string | Date;
+  tradeSource?: "OWN" | "MASTER_COPY" | "COPY" | string | null;
+  copiedFromMaster?: string | null;
+  followerWallet?: string | null;
   onChainTradeId?: string | null;
   onChainTxHash?: string | null;
   onChainSynced?: boolean;
@@ -52,16 +55,38 @@ export const TRADE_HISTORY_DECIMALS = {
 } as const;
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const TRADE_SOURCE_OWN = 0;
+const TRADE_SOURCE_COPY = 1;
+const TRADE_SOURCE_MASTER_COPY = 2;
 
 export function buildTradeRecordFromClosedOrder(order: ClosedOrder): TradeRecordInput {
+  const normalizedTradeSource = order.tradeSource?.toUpperCase();
+  const isCopy = normalizedTradeSource === "COPY" && order.copiedFromMaster;
+  const isMasterCopy = normalizedTradeSource === "MASTER_COPY";
+  const master = isCopy
+    ? getAddress(order.copiedFromMaster as string)
+    : isMasterCopy
+      ? getAddress(order.userWallet)
+      : ZERO_ADDRESS;
+  const follower = isCopy
+    ? getAddress(order.userWallet)
+    : isMasterCopy
+      ? getAddress(order.followerWallet ?? order.userWallet)
+      : ZERO_ADDRESS;
+  const source = isCopy
+    ? TRADE_SOURCE_COPY
+    : isMasterCopy
+      ? TRADE_SOURCE_MASTER_COPY
+      : TRADE_SOURCE_OWN;
+
   return {
     user: getAddress(order.userWallet),
-    master: ZERO_ADDRESS,
-    follower: ZERO_ADDRESS,
+    master,
+    follower,
     openTime: toUnixTimestamp(order.openTime),
     closedTime: toUnixTimestamp(order.closedTime),
     direction: parseDirection(order.direction),
-    source: 0,
+    source,
     quantityDecimals: TRADE_HISTORY_DECIMALS.quantity,
     priceDecimals: TRADE_HISTORY_DECIMALS.price,
     pnlDecimals: TRADE_HISTORY_DECIMALS.pnl,

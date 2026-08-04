@@ -3,10 +3,19 @@
 import * as React from 'react';
 import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
+import {
+  RainbowKitProvider,
+  darkTheme,
+  type AvatarComponent,
+} from '@rainbow-me/rainbowkit';
 import '@rainbow-me/rainbowkit/styles.css';
 import { wagmiConfig } from '@/lib/wagmi';
 import { Toaster } from 'sonner';
+import { WalletAvatar } from '@/components/wallet/wallet-avatar';
+
+const metamaskAvatar: AvatarComponent = ({ address, size }) => (
+  <WalletAvatar address={address} size={size} />
+);
 
 export function Web3Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = React.useState(() => new QueryClient());
@@ -15,6 +24,7 @@ export function Web3Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
+          avatar={metamaskAvatar}
           theme={darkTheme({
             accentColor: '#00E5FF',
             accentColorForeground: '#000000',

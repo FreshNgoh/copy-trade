@@ -1,15 +1,9 @@
-import { Contract, JsonRpcProvider, formatUnits, getAddress } from "ethers";
+import { Contract, JsonRpcProvider, getAddress } from "ethers";
+import { getOnChainTradeMetrics } from "@/lib/web3/trade-history/server";
+import { positionRepository } from "@/repositories/position-repository";
 import { traderDashboardRepository } from "@/repositories/trader-dashboard-repository";
 import type { VerifiedMasterTrader } from "@/types/verified-master";
 import { masterTraderRegistryAbi } from "@/lib/web3/master-registry/abi";
-
-const MASTER_ROI_DECIMALS = 4;
-const MASTER_VOLUME_DECIMALS = 6;
-
-function toNumber(value: unknown) {
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : 0;
-}
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -54,17 +48,22 @@ export async function getVerifiedMasterTraders(): Promise<VerifiedMasterTrader[]
 
       if (!verification.verified) return null;
 
+      const sourceOverrides = await positionRepository.getClosedPositions(address);
+      const masterTradeMetrics = await getOnChainTradeMetrics(address, {
+        source: "master-copy",
+        verifiedAt: verification.verifiedAt,
+        sourceOverrides,
+      });
+
       return {
         traderId: address,
         traderWalletAddress: address as `0x${string}`,
         displayName: shortAddress(address),
         followers: 0,
         walletBalance: 0,
-        totalTrades: toNumber(verification.totalTrades),
-        roi: Number(formatUnits(verification.roi, MASTER_ROI_DECIMALS)),
-        tradingVolume: Number(
-          formatUnits(verification.tradingVolume, MASTER_VOLUME_DECIMALS),
-        ),
+        totalTrades: masterTradeMetrics.totalTrades,
+        roi: masterTradeMetrics.roi,
+        tradingVolume: masterTradeMetrics.tradingVolume,
         verifiedAt:
           verification.verifiedAt > 0n
             ? new Date(Number(verification.verifiedAt) * 1000).toISOString()

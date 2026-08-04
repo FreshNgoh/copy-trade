@@ -1,4 +1,19 @@
-import { Contract, Interface, JsonRpcProvider, Wallet, encodeBytes32String, formatUnits, getAddress, parseUnits } from "ethers";
+import {
+  Contract,
+  Interface,
+  JsonRpcProvider,
+  Wallet,
+  encodeBytes32String,
+  formatUnits,
+  getAddress,
+  parseUnits,
+} from "ethers";
+import type { OnChainTradeRecord } from "./types";
+import {
+  TRADE_SOURCE_MANUAL,
+  TRADE_SOURCE_MASTER_COPY,
+  applyTradeHistorySourceOverrides,
+} from "./source";
 
 const TRADE_HISTORY_WRITE_ABI = [
   {
@@ -131,7 +146,19 @@ export type OnChainTradeMetrics = {
   tradingVolume: number;
 };
 
-const TRADE_SOURCE_OWN = 0;
+type TradeMetricsSource = "manual" | "master-copy";
+
+type TradeSourceOverride = {
+  on_chain_trade_id?: string | number | bigint | null;
+  trade_source?: string | null;
+};
+
+type OnChainTradeMetricsOptions = {
+  source?: TradeMetricsSource;
+  verifiedAt?: bigint | number | string | null;
+  sourceOverrides?: TradeSourceOverride[];
+};
+
 const tradeHistoryInterface = new Interface(TRADE_HISTORY_WRITE_ABI);
 
 export function stringToBytes32(value: string) {
@@ -208,7 +235,10 @@ export async function storeTradeHistoryRecord(record: TradeHistoryRecordInput): 
   throw new Error(`TradeRecordStored event not found: ${receipt.hash}`);
 }
 
-export async function getOnChainTradeMetrics(traderWalletAddress: string): Promise<OnChainTradeMetrics> {
+export async function getOnChainTradeMetrics(
+  traderWalletAddress: string,
+  options: OnChainTradeMetricsOptions = {},
+): Promise<OnChainTradeMetrics> {
   const rpcUrl = process.env.RPC_URL;
   const contractAddress =
     process.env.TRADE_HISTORY_CONTRACT_ADDRESS ?? process.env.NEXT_PUBLIC_TRADE_HISTORY_CONTRACT_ADDRESS;
@@ -221,11 +251,32 @@ export async function getOnChainTradeMetrics(traderWalletAddress: string): Promi
   const provider = new JsonRpcProvider(rpcUrl, chainId);
   const contract = new Contract(getAddress(contractAddress), TRADE_HISTORY_READ_ABI, provider);
   const tradeIds: bigint[] = await contract.getUserTradeIds(getAddress(traderWalletAddress));
-  const records = await Promise.all(tradeIds.map((tradeId) => contract.getTradeRecord(tradeId)));
-  const manualRecords = records.filter((record) => Number(record.source) === TRADE_SOURCE_OWN);
+  const records = await Promise.all(
+    tradeIds.map(async (tradeId) =>
+      normalizeTradeRecord(tradeId, await contract.getTradeRecord(tradeId)),
+    ),
+  );
+  const correctedRecords = applyTradeHistorySourceOverrides(
+    records,
+    options.sourceOverrides ?? [],
+  );
+  const verifiedAt = normalizeOptionalBigInt(options.verifiedAt);
+  const expectedSource =
+    options.source === "master-copy"
+      ? TRADE_SOURCE_MASTER_COPY
+      : TRADE_SOURCE_MANUAL;
+  const metricRecords = correctedRecords.filter((record) => {
+    if (Number(record.source) !== expectedSource) return false;
 
-  const totalTrades = manualRecords.length;
-  const tradingVolume = manualRecords.reduce((total, record) => {
+    return (
+      expectedSource !== TRADE_SOURCE_MASTER_COPY ||
+      verifiedAt === null ||
+      record.closedTime >= verifiedAt
+    );
+  });
+
+  const totalTrades = metricRecords.length;
+  const tradingVolume = metricRecords.reduce((total, record) => {
     const quantity = Number(formatUnits(record.quantity, record.quantityDecimals));
     const entryPrice = Number(formatUnits(record.entryPrice, record.priceDecimals));
 
@@ -234,12 +285,48 @@ export async function getOnChainTradeMetrics(traderWalletAddress: string): Promi
   const roi =
     totalTrades === 0
       ? 0
-      : manualRecords.reduce((total, record) => total + Number(formatUnits(record.roi, record.roiDecimals)), 0) /
+      : metricRecords.reduce((total, record) => total + Number(formatUnits(record.roi, record.roiDecimals)), 0) /
         totalTrades;
 
   return {
     totalTrades,
     roi,
     tradingVolume,
+  };
+}
+
+function normalizeOptionalBigInt(value?: bigint | number | string | null) {
+  if (value === undefined || value === null || value === "") return null;
+  return BigInt(value);
+}
+
+function normalizeTradeRecord(
+  tradeId: bigint,
+  record: Record<string, unknown>,
+): OnChainTradeRecord {
+  return {
+    tradeId,
+    blockNumber: null,
+    transactionHash: null,
+    user: getAddress(String(record.user)) as `0x${string}`,
+    master: getAddress(String(record.master)) as `0x${string}`,
+    follower: getAddress(String(record.follower)) as `0x${string}`,
+    openTime: BigInt(String(record.openTime)),
+    closedTime: BigInt(String(record.closedTime)),
+    direction: Number(record.direction),
+    source: Number(record.source),
+    quantityDecimals: Number(record.quantityDecimals),
+    priceDecimals: Number(record.priceDecimals),
+    pnlDecimals: Number(record.pnlDecimals),
+    roiDecimals: Number(record.roiDecimals),
+    symbol: String(record.symbol) as `0x${string}`,
+    quantity: BigInt(String(record.quantity)),
+    entryPrice: BigInt(String(record.entryPrice)),
+    closingPrice: BigInt(String(record.closingPrice)),
+    pnl: BigInt(String(record.pnl)),
+    roi: BigInt(String(record.roi)),
+    grossPnl: BigInt(String(record.grossPnl)),
+    masterReward: BigInt(String(record.masterReward)),
+    followerReward: BigInt(String(record.followerReward)),
   };
 }

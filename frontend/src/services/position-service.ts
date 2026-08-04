@@ -123,6 +123,7 @@ function buildTradeHistoryRecords(position) {
   const isCopy = isCopiedPosition(position);
   const master = isCopy ? position.copied_from_master : ZERO_ADDRESS;
   const follower = isCopy ? position.trader_wallet_address : ZERO_ADDRESS;
+  const isMasterCopy = position.trade_source === "MASTER_COPY";
   const baseRecord = {
     openTime: toUnixTimestamp(position.created_at),
     closedTime: toUnixTimestamp(position.updated_at),
@@ -140,6 +141,19 @@ function buildTradeHistoryRecords(position) {
     masterReward: toScaledInteger(masterReward, TRADE_HISTORY_DECIMALS.pnl),
     followerReward: toScaledInteger(followerReward, TRADE_HISTORY_DECIMALS.pnl),
   };
+
+  if (isMasterCopy) {
+    return [
+      {
+        ...baseRecord,
+        user: position.trader_wallet_address,
+        master: position.trader_wallet_address,
+        follower: position.trader_wallet_address,
+        source: TRADE_SOURCE_COPY_REWARD,
+        pnl: toScaledInteger(position.Pnl, TRADE_HISTORY_DECIMALS.pnl),
+      },
+    ];
+  }
 
   if (!isCopy) {
     return [
