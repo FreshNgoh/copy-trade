@@ -46,9 +46,14 @@ async function getFreeCollateral(
   traderWalletAddress: string,
   wallet: "manual" | "copy",
 ) {
-  const [portfolio, openPositions] = await Promise.all([
+  const [portfolio, openPositions, activeCopyAllocation] = await Promise.all([
     traderDashboardRepository.ensurePortfolio(traderWalletAddress),
     positionRepository.getOpenPositions(traderWalletAddress),
+    wallet === "copy"
+      ? copyTradingRepository.getActiveCopyAllocation({
+          followerWalletAddress: traderWalletAddress,
+        })
+      : Promise.resolve(0),
   ]);
   const walletBalance = toNumber(
     wallet === "copy" ? portfolio.copy_wallet_balance : portfolio.wallet_balance,
@@ -63,8 +68,18 @@ async function getFreeCollateral(
     (total, position) => total + getPositionInitialMargin(position),
     0,
   );
+  const masterCopyMargin = walletPositions
+    .filter((position) => position.trade_source === "MASTER_COPY")
+    .reduce((total, position) => total + getPositionInitialMargin(position), 0);
+  const followerCopyMargin = walletPositions
+    .filter((position) => position.trade_source === "COPY" || Boolean(position.copied_from_master))
+    .reduce((total, position) => total + getPositionInitialMargin(position), 0);
+  const lockedCollateral =
+    wallet === "copy"
+      ? masterCopyMargin + Math.max(activeCopyAllocation, followerCopyMargin)
+      : usedMargin;
 
-  return walletBalance - usedMargin;
+  return walletBalance - lockedCollateral;
 }
 
 async function syncOpenPositionCount(traderWalletAddress: string) {
@@ -278,14 +293,20 @@ async function syncCopiedFollowers(data: CreatePositionDTO) {
 }
 
 export async function getOpenPositions(traderWalletAddress: string) {
-  const [positions, portfolio] = await Promise.all([
+  const [positions, portfolio, activeCopyAllocation] = await Promise.all([
     positionRepository.getOpenPositions(traderWalletAddress),
     traderDashboardRepository.ensurePortfolio(traderWalletAddress),
+    copyTradingRepository.getActiveCopyAllocation({
+      followerWalletAddress: traderWalletAddress,
+    }),
   ]);
 
   return calculateWalletLiquidationPrices(positions, {
     manual: toNumber(portfolio.wallet_balance),
-    copy: toNumber(portfolio.copy_wallet_balance),
+    copy: Math.max(
+      toNumber(portfolio.copy_wallet_balance) - activeCopyAllocation,
+      0,
+    ),
   });
 }
 

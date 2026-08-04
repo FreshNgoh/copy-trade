@@ -98,13 +98,40 @@ contract CopyTrading is AccessControl {
         uint16 maxDailyTrades,
         bool enabled
     ) external {
-        if (trader == address(0) || trader == msg.sender) revert InvalidAddress();
+        _setCopySettings(msg.sender, trader, maxCopyAmount, maxAllocationBps, stopLossBps, maxDailyTrades, enabled);
+    }
+
+    /// @notice Stores follower settings through the trusted backend executor.
+    function setCopySettingsFor(
+        address follower,
+        address trader,
+        uint256 maxCopyAmount,
+        uint16 maxAllocationBps,
+        uint16 stopLossBps,
+        uint16 maxDailyTrades,
+        bool enabled
+    ) external onlyRole(EXECUTOR_ROLE) {
+        _setCopySettings(follower, trader, maxCopyAmount, maxAllocationBps, stopLossBps, maxDailyTrades, enabled);
+    }
+
+    function _setCopySettings(
+        address follower,
+        address trader,
+        uint256 maxCopyAmount,
+        uint16 maxAllocationBps,
+        uint16 stopLossBps,
+        uint16 maxDailyTrades,
+        bool enabled
+    ) private {
+        if (follower == address(0) || trader == address(0) || trader == follower) {
+            revert InvalidAddress();
+        }
         if (maxCopyAmount == 0) revert InvalidMaxCopyAmount();
         if (maxAllocationBps == 0 || maxAllocationBps > BPS_DENOMINATOR) revert InvalidAllocation();
         if (stopLossBps == 0 || stopLossBps > BPS_DENOMINATOR) revert InvalidStopLoss();
         if (maxDailyTrades == 0) revert InvalidMaxDailyTrades();
 
-        copySettings[msg.sender][trader] = CopySettings({
+        copySettings[follower][trader] = CopySettings({
             enabled: enabled,
             maxCopyAmount: maxCopyAmount,
             maxAllocationBps: maxAllocationBps,
@@ -113,7 +140,7 @@ contract CopyTrading is AccessControl {
         });
 
         emit CopySettingsUpdated(
-            msg.sender, trader, maxCopyAmount, maxAllocationBps, stopLossBps, maxDailyTrades, enabled
+            follower, trader, maxCopyAmount, maxAllocationBps, stopLossBps, maxDailyTrades, enabled
         );
     }
 
@@ -122,6 +149,15 @@ contract CopyTrading is AccessControl {
         settings.enabled = false;
 
         emit CopyPaused(msg.sender, trader);
+    }
+
+    /// @notice Pauses follower settings through the trusted backend executor.
+    function pauseCopyFor(address follower, address trader) external onlyRole(EXECUTOR_ROLE) {
+        if (follower == address(0) || trader == address(0) || follower == trader) revert InvalidAddress();
+        CopySettings storage settings = copySettings[follower][trader];
+        settings.enabled = false;
+
+        emit CopyPaused(follower, trader);
     }
 
     function openCopiedTrade(

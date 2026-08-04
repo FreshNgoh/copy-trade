@@ -58,6 +58,38 @@ contract CopyTradingTest is Test {
         assertEq(maxDailyTrades, 2);
     }
 
+    function testExecutorCanStoreCopySettingsForFollower() public {
+        vm.prank(executor);
+        copyTrading.setCopySettingsFor(follower, trader, 250e6, 1_500, 1_000, 5, true);
+
+        (bool enabled, uint256 maxCopyAmount, uint16 maxAllocationBps, uint16 stopLossBps, uint16 maxDailyTrades) =
+            copyTrading.copySettings(follower, trader);
+
+        assertTrue(enabled);
+        assertEq(maxCopyAmount, 250e6);
+        assertEq(maxAllocationBps, 1_500);
+        assertEq(stopLossBps, 1_000);
+        assertEq(maxDailyTrades, 5);
+    }
+
+    function testUnauthorizedCannotStoreCopySettingsForFollower() public {
+        vm.prank(unauthorized);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, unauthorized, copyTrading.EXECUTOR_ROLE()
+            )
+        );
+        copyTrading.setCopySettingsFor(follower, trader, 250e6, 1_500, 1_000, 5, true);
+    }
+
+    function testExecutorCanPauseCopyForFollower() public {
+        vm.prank(executor);
+        copyTrading.pauseCopyFor(follower, trader);
+
+        (bool enabled,,,,) = copyTrading.copySettings(follower, trader);
+        assertFalse(enabled);
+    }
+
     function testExecutorCanOpenCopiedTradeAndLockMargin() public {
         vm.prank(executor);
         uint256 positionId = copyTrading.openCopiedTrade({

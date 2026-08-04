@@ -33,6 +33,10 @@ function isCopyPosition(position: TraderDashboardPosition) {
   );
 }
 
+function isFollowerCopyPosition(position: TraderDashboardPosition) {
+  return position.trade_source === "COPY" || Boolean(position.copied_from_master);
+}
+
 function getSettledPnl(position: TraderDashboardPosition) {
   if (!isCopyPosition(position)) {
     return toNumber(position.Pnl);
@@ -110,6 +114,12 @@ export async function getTraderDashboard(
     (position) => !isCopyPosition(position),
   );
   const copyActivePositions = activePositions.filter(isCopyPosition);
+  const masterCopyActivePositions = copyActivePositions.filter(
+    (position) => !isFollowerCopyPosition(position),
+  );
+  const followerCopyActivePositions = copyActivePositions.filter(
+    isFollowerCopyPosition,
+  );
   const manualClosedPositions = closedPositions.filter(
     (position) => !isCopyPosition(position),
   );
@@ -137,6 +147,14 @@ export async function getTraderDashboard(
     (total, position) => total + getPositionMargin(position),
     0,
   );
+  const masterCopyMarginUsed = masterCopyActivePositions.reduce(
+    (total, position) => total + getPositionMargin(position),
+    0,
+  );
+  const followerCopyMarginUsed = followerCopyActivePositions.reduce(
+    (total, position) => total + getPositionMargin(position),
+    0,
+  );
   const openPositionValue = activePositions.reduce(
     (total, position) => total + getPositionNotional(position),
     0,
@@ -152,15 +170,21 @@ export async function getTraderDashboard(
     : null;
   const walletBalance = portfolioData?.wallet_balance ?? 0;
   const copyWalletBalance = portfolioData?.copy_wallet_balance ?? 0;
-  const copyLockedCollateral = Math.max(activeCopyAllocation, copyMarginUsed);
+  const copyLockedCollateral =
+    masterCopyMarginUsed +
+    Math.max(activeCopyAllocation, followerCopyMarginUsed);
   const copyTransferableBalance = Math.max(
     copyWalletBalance - copyLockedCollateral,
     0,
   );
   const totalWalletBalance = walletBalance + copyWalletBalance;
+  const masterCopyLiquidationCollateral = Math.max(
+    copyWalletBalance - activeCopyAllocation,
+    0,
+  );
   const activePositionsWithLiquidation = calculateWalletLiquidationPrices(
     activePositions,
-    { manual: walletBalance, copy: copyWalletBalance },
+    { manual: walletBalance, copy: masterCopyLiquidationCollateral },
   );
 
   return {
@@ -178,7 +202,7 @@ export async function getTraderDashboard(
       manualMarginUsed,
       copyMarginUsed,
       freeCollateral: Math.max(walletBalance - manualMarginUsed, 0),
-      copyFreeCollateral: Math.max(copyWalletBalance - copyMarginUsed, 0),
+      copyFreeCollateral: copyTransferableBalance,
       copyLockedCollateral,
       copyActiveAllocation: activeCopyAllocation,
       copyTransferableBalance,

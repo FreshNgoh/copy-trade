@@ -11,7 +11,6 @@ export async function POST(req: NextRequest) {
       maxAllocationBps: requirePositiveNumber(body.max_allocation_bps, "max_allocation_bps"),
       stopLossBps: requirePositiveNumber(body.stop_loss_bps, "stop_loss_bps"),
       maxDailyTrades: requirePositiveNumber(body.max_daily_trades, "max_daily_trades"),
-      settingsTxHash: requireString(body.settings_tx_hash, "settings_tx_hash"),
     });
 
     return NextResponse.json(result, { status: 201 });
@@ -29,7 +28,6 @@ export async function PATCH(req: NextRequest) {
     const result = await pauseCopySettings({
       masterWalletAddress: requireAddress(body.master_wallet_address, "master_wallet_address"),
       followerWalletAddress: requireAddress(body.follower_wallet_address, "follower_wallet_address"),
-      pausedTxHash: requireString(body.paused_tx_hash, "paused_tx_hash"),
     });
 
     return NextResponse.json(result, { status: 200 });

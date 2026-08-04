@@ -1,9 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { formatUnits, parseUnits, type Abi } from 'viem';
-import { waitForTransactionReceipt } from 'wagmi/actions';
-import { useAccount, useReadContract, useWriteContract } from 'wagmi';
+import { formatUnits, type Abi } from 'viem';
+import { useAccount, useReadContract } from 'wagmi';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -11,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Shield, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
-import { wagmiConfig } from '@/lib/wagmi';
 import { CONTRACTS } from '@/lib/web3/constants/contracts';
 import copyTrading from '@/lib/web3/abi/copy-trading-abi.json';
 import { WalletAvatar } from '@/components/wallet/wallet-avatar';
@@ -36,13 +34,12 @@ export function CopySettingsModal({
   onOpenChange: (v: boolean) => void;
   trader: CopyTrader;
 }) {
-  const [investment, setInvestment] = React.useState(1000);
+  const [investment, setInvestment] = React.useState("1000");
   const [allocation, setAllocation] = React.useState([10]);
   const [stopLoss, setStopLoss] = React.useState([20]);
   const [maxTrades, setMaxTrades] = React.useState([10]);
   const [submitting, setSubmitting] = React.useState(false);
-  const { address, isConnected, chain } = useAccount();
-  const { writeContractAsync, isPending } = useWriteContract();
+  const { address, isConnected } = useAccount();
 
   const copyContractReady = Boolean(CONTRACTS.copyTrading && address && trader.address);
 
@@ -93,13 +90,15 @@ export function CopySettingsModal({
   React.useEffect(() => {
     if (!open || !currentSettings || !currentSettings.enabled) return;
 
-    setInvestment(Number(formatUnits(currentSettings.maxCopyAmount, 6)));
+    setInvestment(formatUnits(currentSettings.maxCopyAmount, 6));
     setAllocation([currentSettings.maxAllocationBps / 100]);
     setStopLoss([currentSettings.stopLossBps / 100]);
     setMaxTrades([currentSettings.maxDailyTrades]);
   }, [currentSettings, open]);
 
   const handleConfirm = async () => {
+    const investmentAmount = Number(investment);
+
     if (!CONTRACTS.copyTrading) {
       toast.error('Copy trading contract is not configured');
       return;
@@ -110,12 +109,7 @@ export function CopySettingsModal({
       return;
     }
 
-    if (!chain) {
-      toast.error('Wallet chain not detected');
-      return;
-    }
-
-    if (!investment || investment <= 0) {
+    if (!Number.isFinite(investmentAmount) || investmentAmount <= 0) {
       toast.error('Enter valid investment amount');
       return;
     }
@@ -131,38 +125,20 @@ export function CopySettingsModal({
         Number(dashboard.stats.copyActiveAllocation || 0) - currentActiveCap,
         0,
       );
-      const requiredCopyBalance = otherActiveAllocation + investment;
+      const requiredCopyBalance = otherActiveAllocation + investmentAmount;
       if (requiredCopyBalance > Number(dashboard.stats.copyWalletBalance || 0)) {
         throw new Error(
           `Active allocations require ${requiredCopyBalance.toFixed(2)} USDC. Transfer ${(requiredCopyBalance - dashboard.stats.copyWalletBalance).toFixed(2)} USDC to Copy Wallet or pause another master first.`,
         );
       }
 
-      const hash = await writeContractAsync({
-        address: CONTRACTS.copyTrading,
-        abi: copyTradingAbi,
-        functionName: 'setCopySettings',
-        args: [
-          trader.address,
-          parseUnits(String(investment), 6),
-          allocation[0] * 100,
-          stopLoss[0] * 100,
-          maxTrades[0],
-          true,
-        ],
-        account: address,
-        chain,
-      });
-
-      await waitForTransactionReceipt(wagmiConfig, { hash });
       await saveCopySettingsApi({
         masterWalletAddress: trader.address,
         followerWalletAddress: address,
-        maxCopyAmount: investment,
+        maxCopyAmount: investmentAmount,
         maxAllocationBps: allocation[0] * 100,
         stopLossBps: stopLoss[0] * 100,
         maxDailyTrades: maxTrades[0],
-        settingsTxHash: hash,
       });
 
       await Promise.all([
@@ -172,7 +148,7 @@ export function CopySettingsModal({
 
       onOpenChange(false);
       toast.success(`Now copying ${trader.ens}`, {
-        description: `$${investment.toLocaleString()} allocated. ${allocation[0]}% per trade. Stop-loss at ${stopLoss[0]}%.`,
+        description: `$${investmentAmount.toLocaleString()} allocated. ${allocation[0]}% per trade. Stop-loss at ${stopLoss[0]}%.`,
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Copy settings failed');
@@ -192,28 +168,12 @@ export function CopySettingsModal({
       return;
     }
 
-    if (!chain) {
-      toast.error('Wallet chain not detected');
-      return;
-    }
-
     try {
       setSubmitting(true);
 
-      const hash = await writeContractAsync({
-        address: CONTRACTS.copyTrading,
-        abi: copyTradingAbi,
-        functionName: 'pauseCopy',
-        args: [trader.address],
-        account: address,
-        chain,
-      });
-
-      await waitForTransactionReceipt(wagmiConfig, { hash });
       await pauseCopySettingsApi({
         masterWalletAddress: trader.address,
         followerWalletAddress: address,
-        pausedTxHash: hash,
       });
       await refetchCopySettings();
 
@@ -268,7 +228,9 @@ export function CopySettingsModal({
                 data-testid="copy-investment-input"
                 type="number"
                 value={investment}
-                onChange={(e) => setInvestment(Number(e.target.value))}
+                min="0"
+                step="any"
+                onChange={(e) => setInvestment(e.target.value)}
                 className="flex-1 bg-transparent py-2.5 outline-none font-mono text-sm"
               />
               <span className="px-3 text-muted-foreground font-mono text-xs">USDC</span>
@@ -365,7 +327,7 @@ export function CopySettingsModal({
               data-testid="copy-pause-button"
               variant="outline"
               onClick={handlePause}
-              disabled={submitting || isPending}
+              disabled={submitting}
               className="flex-1 rounded-none border-warning/50 bg-transparent text-warning hover:bg-warning/10"
             >
               Pause
@@ -374,10 +336,10 @@ export function CopySettingsModal({
           <Button
             data-testid="copy-confirm-button"
             onClick={handleConfirm}
-            disabled={submitting || isPending}
+            disabled={submitting}
             className="flex-1 rounded-none bg-accent text-accent-foreground hover:bg-accent/90 font-medium"
           >
-            {submitting || isPending ? 'Signing…' : currentSettings?.enabled ? 'Update Copy' : 'Confirm Copy'}
+            {submitting ? 'Confirming…' : currentSettings?.enabled ? 'Update Copy' : 'Confirm Copy'}
           </Button>
         </div>
       </DialogContent>

@@ -40,6 +40,31 @@ const COPY_TRADING_ABI = [
   },
   {
     type: "function",
+    name: "setCopySettingsFor",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "follower", type: "address" },
+      { name: "trader", type: "address" },
+      { name: "maxCopyAmount", type: "uint256" },
+      { name: "maxAllocationBps", type: "uint16" },
+      { name: "stopLossBps", type: "uint16" },
+      { name: "maxDailyTrades", type: "uint16" },
+      { name: "enabled", type: "bool" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "pauseCopyFor",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "follower", type: "address" },
+      { name: "trader", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "closeCopiedTrade",
     stateMutability: "nonpayable",
     inputs: [{ name: "positionId", type: "uint256" }],
@@ -103,7 +128,53 @@ export type CloseCopiedTradeResult = {
   txHash: string;
 };
 
+export type SaveCopySettingsOnChainInput = {
+  follower: string;
+  trader: string;
+  maxCopyAmount: number;
+  maxAllocationBps: number;
+  stopLossBps: number;
+  maxDailyTrades: number;
+};
+
 const copyTradingInterface = new Interface(COPY_TRADING_ABI);
+
+export async function saveCopySettingsOnChain(
+  input: SaveCopySettingsOnChainInput,
+) {
+  const context = requireCopyTradingWriteContext();
+  const tx = await context.contract.setCopySettingsFor(
+    getAddress(input.follower),
+    getAddress(input.trader),
+    scaleUsdc(input.maxCopyAmount),
+    input.maxAllocationBps,
+    input.stopLossBps,
+    input.maxDailyTrades,
+    true,
+  );
+  const receipt = await tx.wait(1);
+
+  if (!receipt || receipt.status === 0) {
+    throw new Error("Copy settings transaction failed");
+  }
+
+  return receipt.hash;
+}
+
+export async function pauseCopySettingsOnChain(follower: string, trader: string) {
+  const context = requireCopyTradingWriteContext();
+  const tx = await context.contract.pauseCopyFor(
+    getAddress(follower),
+    getAddress(trader),
+  );
+  const receipt = await tx.wait(1);
+
+  if (!receipt || receipt.status === 0) {
+    throw new Error("Pause copy transaction failed");
+  }
+
+  return receipt.hash;
+}
 
 export async function getEnabledCopyFollowers(trader: string): Promise<EnabledCopyFollower[]> {
   const context = getCopyTradingReadContext();
@@ -274,6 +345,16 @@ function getCopyTradingWriteContext() {
     contract: readContext.contract.connect(signer) as Contract,
     provider,
   };
+}
+
+function requireCopyTradingWriteContext() {
+  const context = getCopyTradingWriteContext();
+
+  if (!context) {
+    throw new Error("Copy trading executor is not configured");
+  }
+
+  return context;
 }
 
 function scaleUsdc(value: number) {

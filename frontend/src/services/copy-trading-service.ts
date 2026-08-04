@@ -37,7 +37,6 @@ export async function copyMasterPositionToFollowers(masterTrade: CreatePositionD
       const requestedCopyMargin = await getRequestedCopyMargin({
         follower,
         master: masterTrade.trader_wallet_address,
-        requestedMargin,
         maxCopyAmount,
         maxAllocationBps,
       });
@@ -92,13 +91,11 @@ export async function copyMasterPositionToFollowers(masterTrade: CreatePositionD
 async function getRequestedCopyMargin({
   follower,
   master,
-  requestedMargin,
   maxCopyAmount,
   maxAllocationBps,
 }: {
   follower: string;
   master: string;
-  requestedMargin: number;
   maxCopyAmount?: number;
   maxAllocationBps?: number;
 }) {
@@ -122,8 +119,11 @@ async function getRequestedCopyMargin({
       ? (copyWalletBalance * Number(maxAllocationBps || 0)) / 10_000
       : copyFreeCollateral;
 
+  // The follower's per-trade allocation determines copied position size.
+  // The master's margin is intentionally not used as a cap: direction,
+  // symbol, entry price, and leverage are mirrored, while sizing follows the
+  // follower's own copy-wallet settings.
   return Math.min(
-    requestedMargin,
     Math.max(copyFreeCollateral, 0),
     Math.max(remainingMasterAllocation, 0),
     Math.max(allocationLimit, 0),

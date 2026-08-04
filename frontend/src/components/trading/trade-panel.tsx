@@ -11,6 +11,12 @@ import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
 import { calculateTradeMetrics, calculateWalletLiquidationPrices } from "@/lib/trading/calculation";
 import type { TraderDashboardPosition } from "@/types/trader-dashboard";
 
+const DEFAULT_LEVERAGE = 5;
+
+function getLeverageStorageKey(address: string) {
+  return `copy-trade:last-leverage:${address.toLowerCase()}`;
+}
+
 export function TradePanel({
   pair,
   midPrice,
@@ -30,12 +36,13 @@ export function TradePanel({
   const [price, setLimitPrice] = React.useState(midPrice.toFixed(2));
   const [margin, setMargin] = React.useState("");
   const [quantityInput, setQuantityInputValue] = React.useState("");
-  const [leverage, setLeverage] = React.useState([5]);
+  const [leverage, setLeverage] = React.useState([DEFAULT_LEVERAGE]);
   const [stopLoss, setStopLoss] = React.useState("");
   const [takeProfit, setTakeProfit] = React.useState("");
   const [freeCollateral, setFreeCollateral] = React.useState(0);
   const [manualWalletBalance, setManualWalletBalance] = React.useState(0);
   const [copyWalletBalance, setCopyWalletBalance] = React.useState(0);
+  const [copyActiveAllocation, setCopyActiveAllocation] = React.useState(0);
   const [manualFreeCollateral, setManualFreeCollateral] = React.useState(0);
   const [copyFreeCollateral, setCopyFreeCollateral] = React.useState(0);
   const [openPositions, setOpenPositions] = React.useState<TraderDashboardPosition[]>([]);
@@ -82,9 +89,9 @@ export function TradePanel({
       : [...selectedPositions, { position_id: previewId, trader_wallet_address: address ?? "", symbol: pair, quantity: orderQuantity, direction: positionDirection, entry_price: orderPrice, leverage: leverage[0], stop_loss: null, take_profit: null, status: "OPEN" as const, created_at: "", updated_at: "", trade_source: tradeMode === "COPY" ? "MASTER_COPY" as const : "OWN" as const }];
     return calculateWalletLiquidationPrices(previewPositions, {
       manual: manualWalletBalance,
-      copy: copyWalletBalance,
+      copy: Math.max(copyWalletBalance - copyActiveAllocation, 0),
     }).find((position) => position.position_id === previewId)?.liquidation_price ?? 0;
-  }, [address, copyWalletBalance, direction, leverage, manualWalletBalance, openPositions, orderPrice, orderQuantity, pair, tradeMode]);
+  }, [address, copyActiveAllocation, copyWalletBalance, direction, leverage, manualWalletBalance, openPositions, orderPrice, orderQuantity, pair, tradeMode]);
   const isOverFreeCollateral =
     marginAmount > 0 && marginAmount > freeCollateral;
   const canSubmit =
@@ -94,6 +101,36 @@ export function TradePanel({
     marginAmount > 0 &&
     orderQuantity > 0 &&
     !isOverFreeCollateral;
+
+  React.useEffect(() => {
+    if (!address) {
+      setLeverage([DEFAULT_LEVERAGE]);
+      return;
+    }
+
+    const savedLeverage = Number(
+      window.localStorage.getItem(getLeverageStorageKey(address)),
+    );
+    setLeverage([
+      Number.isInteger(savedLeverage) && savedLeverage >= 1 && savedLeverage <= 20
+        ? savedLeverage
+        : DEFAULT_LEVERAGE,
+    ]);
+  }, [address]);
+
+  const updateLeverage = React.useCallback(
+    (nextLeverage: number[]) => {
+      setLeverage(nextLeverage);
+
+      if (address && nextLeverage[0] >= 1 && nextLeverage[0] <= 20) {
+        window.localStorage.setItem(
+          getLeverageStorageKey(address),
+          String(nextLeverage[0]),
+        );
+      }
+    },
+    [address],
+  );
 
   const loadFreeCollateral = React.useCallback(async () => {
     if (!address) {
@@ -110,12 +147,14 @@ export function TradePanel({
       setFreeCollateral(tradeMode === "COPY" ? nextCopyFree : nextManualFree);
       setManualWalletBalance(Number(dashboard.stats.walletBalance || 0));
       setCopyWalletBalance(Number(dashboard.stats.copyWalletBalance || 0));
+      setCopyActiveAllocation(Number(dashboard.stats.copyActiveAllocation || 0));
       setOpenPositions(dashboard.activePositions);
     } catch (error) {
       console.error("Failed to fetch free collateral:", error);
       setFreeCollateral(0);
       setManualWalletBalance(0);
       setCopyWalletBalance(0);
+      setCopyActiveAllocation(0);
       setOpenPositions([]);
     }
   }, [address, tradeMode]);
@@ -398,7 +437,7 @@ export function TradePanel({
           <Slider
             data-testid="trade-leverage-slider"
             value={leverage}
-            onValueChange={setLeverage}
+            onValueChange={updateLeverage}
             min={1}
             max={20}
             step={1}
@@ -407,7 +446,7 @@ export function TradePanel({
             {[1, 3, 5, 10, 20].map((l) => (
               <button
                 key={l}
-                onClick={() => setLeverage([l])}
+                onClick={() => updateLeverage([l])}
                 className={cn(
                   "py-1 text-[10px] font-mono border transition-colors",
                   leverage[0] === l
