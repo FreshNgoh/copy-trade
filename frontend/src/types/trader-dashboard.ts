@@ -15,6 +15,7 @@ export interface TraderDashboardPortfolio {
   positions: number;
   followers: number;
   is_verified_master?: boolean;
+  master_verified_at?: string | null;
 }
 
 export interface TraderDashboardStats {

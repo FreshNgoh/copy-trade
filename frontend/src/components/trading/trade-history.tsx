@@ -9,6 +9,12 @@ import {
   formatTimestamp,
 } from "@/lib/web3/trade-history/format";
 import type { OnChainTradeRecord } from "@/lib/web3/trade-history/types";
+import {
+  getTradeHistoryDisplaySource,
+  getTradeHistorySourceLabel,
+  TRADE_SOURCE_COPY,
+  TRADE_SOURCE_MASTER_COPY,
+} from "@/lib/web3/trade-history/source";
 
 function shortAddress(address?: string | null) {
   if (!address) return "-";
@@ -19,10 +25,12 @@ export function HistoryTable({
   records,
   isLoading = false,
   error = null,
+  verifiedAt = null,
 }: {
   records: OnChainTradeRecord[];
   isLoading?: boolean;
   error?: string | null;
+  verifiedAt?: bigint | null;
 }) {
   if (error) {
     return (
@@ -52,8 +60,6 @@ export function HistoryTable({
               <th className="text-right px-4 py-2">Entry</th>
               <th className="text-right px-4 py-2">Close</th>
               <th className="text-right px-4 py-2">PnL</th>
-              <th className="text-right px-4 py-2">Gross</th>
-              <th className="text-right px-4 py-2">Split</th>
               <th className="text-right px-4 py-2">ROI</th>
               <th className="text-right px-4 py-2">Opened</th>
               <th className="text-right px-4 py-2">Closed</th>
@@ -85,7 +91,7 @@ export function HistoryTable({
                   </td>
                   <td className="px-4 py-2.5 font-mono text-sm">{symbol}</td>
                   <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                    <TradeSource record={record} />
+                    <TradeSource record={record} verifiedAt={verifiedAt} />
                   </td>
                   <td className="px-4 py-2.5">
                     <span
@@ -120,16 +126,6 @@ export function HistoryTable({
                   >
                     {formatPnl(record.pnl, record.pnlDecimals)}
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-sm text-muted-foreground">
-                    {record.source === 0
-                      ? "-"
-                      : formatPnl(record.grossPnl, record.pnlDecimals)}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
-                    {record.source === 0
-                      ? "-"
-                      : `M ${formatPnl(record.masterReward, record.pnlDecimals)} / F ${formatPnl(record.followerReward, record.pnlDecimals)}`}
-                  </td>
                   <td
                     className={cn(
                       "px-4 py-2.5 text-right font-mono text-sm",
@@ -154,11 +150,19 @@ export function HistoryTable({
   );
 }
 
-function TradeSource({ record }: { record: OnChainTradeRecord }) {
-  if (record.source === 1) {
+function TradeSource({
+  record,
+  verifiedAt,
+}: {
+  record: OnChainTradeRecord;
+  verifiedAt?: bigint | null;
+}) {
+  const source = getTradeHistoryDisplaySource(record, verifiedAt);
+
+  if (source === TRADE_SOURCE_COPY) {
     return (
       <div>
-        <div className="text-accent">Copied</div>
+        <div className="text-accent">{getTradeHistorySourceLabel(source)}</div>
         <div className="text-[10px] text-muted-foreground">
           from {shortAddress(record.master)}
         </div>
@@ -166,16 +170,9 @@ function TradeSource({ record }: { record: OnChainTradeRecord }) {
     );
   }
 
-  if (record.source === 2) {
-    return (
-      <div>
-        <div className="text-success">Copy Reward</div>
-        <div className="text-[10px] text-muted-foreground">
-          from {shortAddress(record.follower)}
-        </div>
-      </div>
-    );
+  if (source === TRADE_SOURCE_MASTER_COPY) {
+    return <span className="text-success">Master trade</span>;
   }
 
-  return <span>Manual</span>;
+  return <span>{getTradeHistorySourceLabel(source)}</span>;
 }

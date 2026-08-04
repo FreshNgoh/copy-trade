@@ -9,11 +9,22 @@ import {
 } from "@/lib/web3/trade-history/format";
 import type { OnChainTradeRecord } from "@/lib/web3/trade-history/types";
 import { TRADE_HISTORY_CONTRACT_ADDRESS } from "@/lib/web3/trade-history/constants";
+import {
+  getTradeHistoryDisplaySource,
+  getTradeHistorySourceLabel,
+  TRADE_SOURCE_COPY,
+  TRADE_SOURCE_MASTER_COPY,
+  TRADE_SOURCE_MANUAL,
+} from "@/lib/web3/trade-history/source";
 
-type View = "all" | "manual" | "copy";
+type View = "all" | "manual" | "copy" | "master-copy";
 
-function isCopy(record: OnChainTradeRecord) {
-  return record.source !== 0;
+function matchesView(record: OnChainTradeRecord, view: View, verifiedAt?: bigint | null) {
+  const source = getTradeHistoryDisplaySource(record, verifiedAt);
+  if (view === "all") return true;
+  if (view === "manual") return source === TRADE_SOURCE_MANUAL;
+  if (view === "copy") return source === TRADE_SOURCE_COPY;
+  return source === TRADE_SOURCE_MASTER_COPY;
 }
 
 function pnl(record: OnChainTradeRecord) {
@@ -39,14 +50,16 @@ function usd(value: number) {
 export function TradePerformanceAnalysis({
   records,
   isLoading = false,
+  verifiedAt = null,
 }: {
   records: OnChainTradeRecord[];
   isLoading?: boolean;
+  verifiedAt?: bigint | null;
 }) {
   const [view, setView] = React.useState<View>("all");
   const trades = React.useMemo(
-    () => records.filter((trade) => view === "all" || (view === "copy") === isCopy(trade)),
-    [records, view],
+    () => records.filter((trade) => matchesView(trade, view, verifiedAt)),
+    [records, verifiedAt, view],
   );
 
   const analysis = React.useMemo(() => {
@@ -97,7 +110,7 @@ export function TradePerformanceAnalysis({
     <div className="space-y-5">
       <div className="flex justify-end">
         <div className="inline-flex border border-border bg-background p-0.5">
-          {(["all", "manual", "copy"] as View[]).map((item) => <button key={item} type="button" onClick={() => setView(item)} className={cn("px-4 py-2 text-[10px] font-mono uppercase tracking-wider", view === item ? "bg-white text-black" : "text-muted-foreground hover:text-white")}>{item}</button>)}
+          {(["all", "manual", "copy", "master-copy"] as View[]).map((item) => <button key={item} type="button" onClick={() => setView(item)} className={cn("px-4 py-2 text-[10px] font-mono uppercase tracking-wider", view === item ? "bg-white text-black" : "text-muted-foreground hover:text-white")}>{item === "master-copy" ? "master copy" : item}</button>)}
         </div>
       </div>
 
@@ -162,7 +175,7 @@ export function TradePerformanceAnalysis({
               </td>
               <td className="px-4 py-3 font-mono text-accent">{symbol(trade)}</td>
               <td className="px-4 py-3 font-mono">{direction(trade)}</td>
-              <td className="px-4 py-3 text-muted-foreground">{isCopy(trade) ? "Copy" : "Manual"}</td>
+              <td className="px-4 py-3 text-muted-foreground">{getTradeHistorySourceLabel(getTradeHistoryDisplaySource(trade, verifiedAt))}</td>
               <td className={cn("px-4 py-3 text-right font-mono", roi(trade) >= 0 ? "text-success" : "text-danger")}>{roi(trade) >= 0 ? "+" : ""}{roi(trade).toFixed(2)}%</td>
               <td className={cn("px-4 py-3 text-right font-mono", pnl(trade) >= 0 ? "text-success" : "text-danger")}>{pnl(trade) >= 0 ? "+" : ""}{usd(pnl(trade))}</td>
             </tr>

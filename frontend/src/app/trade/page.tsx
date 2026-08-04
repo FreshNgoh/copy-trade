@@ -4,8 +4,11 @@ import * as React from "react";
 import { CandlestickChart } from "@/components/trading/candlestick-chart";
 import { OrderBook } from "@/components/trading/order-book";
 import { TradePanel } from "@/components/trading/trade-panel";
-import { getPositionsApi } from "@/lib/api/position-api";
-import { closePositionApi } from "@/lib/api/position-api";
+import {
+  closePositionApi,
+  getClosedPositionsApi,
+  getPositionsApi,
+} from "@/lib/api/position-api";
 import { cn } from "@/lib/utils";
 import { BINANCE_TESTNET_BASE, SYMBOL_MAP } from "@/lib/trading/binance";
 import { PositionsTable } from "@/components/trading/position-table";
@@ -16,7 +19,7 @@ import { PairSelector } from "@/components/trading/pair-selector";
 import { useBinancePrice } from "@/hooks/use-binance-price";
 import { useAccount, usePublicClient } from "wagmi";
 import { sepolia } from "wagmi/chains";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Info } from "lucide-react";
 import { addNotification } from "@/lib/notifications";
 import { toast } from "sonner";
 import type { Position } from "@/types/position";
@@ -25,6 +28,9 @@ import { Switch } from "@/components/ui/switch";
 import { readUserTradeHistoryRecords } from "@/lib/web3/trade-history/client";
 import { TRADE_HISTORY_CONTRACT_ADDRESS } from "@/lib/web3/trade-history/constants";
 import type { OnChainTradeRecord } from "@/lib/web3/trade-history/types";
+import { masterTraderRegistryReadAbi } from "@/lib/web3/master-registry/read-abi";
+import { MASTER_REGISTRY_CONTRACT_ADDRESS } from "@/lib/web3/master-registry/constants";
+import { applyTradeHistorySourceOverrides } from "@/lib/web3/trade-history/source";
 
 const INITIAL_PAIRS = [
   { pair: "ETH/USDC", price: 0, change: 0, vol: "$0" },
@@ -36,6 +42,13 @@ const INITIAL_PAIRS = [
 
 function getTradeModeStorageKey(address: string) {
   return `copy-trade:trade-mode:${address.toLowerCase()}`;
+}
+
+function dateToUnixSeconds(value?: string | null) {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+
+  return Number.isFinite(timestamp) ? BigInt(Math.floor(timestamp / 1000)) : null;
 }
 
 function shortAddress(address: string) {
@@ -90,6 +103,7 @@ export default function TradePage() {
   const [orderPositions, setOrderPositions] = React.useState([]);
   const [tradeMode, setTradeMode] = React.useState<"MANUAL" | "COPY">("MANUAL");
   const [isVerifiedMaster, setIsVerifiedMaster] = React.useState(false);
+  const [masterVerifiedAt, setMasterVerifiedAt] = React.useState<bigint | null>(null);
   const liquidationWarningsRef = React.useRef(new Set<string>());
   const liquidationClosingRef = React.useRef(false);
 
@@ -116,6 +130,7 @@ export default function TradePage() {
 
     if (!address) {
       setIsVerifiedMaster(false);
+      setMasterVerifiedAt(null);
       setTradeMode("MANUAL");
       return;
     }
@@ -125,6 +140,9 @@ export default function TradePage() {
         if (cancelled) return;
         const verified = Boolean(dashboard.portfolio?.is_verified_master);
         setIsVerifiedMaster(verified);
+        setMasterVerifiedAt(
+          verified ? dateToUnixSeconds(dashboard.portfolio?.master_verified_at) : null,
+        );
         if (verified) {
           const savedMode = window.localStorage.getItem(
             getTradeModeStorageKey(address),
@@ -137,6 +155,7 @@ export default function TradePage() {
       .catch(() => {
         if (cancelled) return;
         setIsVerifiedMaster(false);
+        setMasterVerifiedAt(null);
         setTradeMode("MANUAL");
       });
 
@@ -144,6 +163,44 @@ export default function TradePage() {
       cancelled = true;
     };
   }, [address]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function loadMasterVerification() {
+      if (!address || !publicClient || !MASTER_REGISTRY_CONTRACT_ADDRESS) {
+        setMasterVerifiedAt(null);
+        return;
+      }
+
+      try {
+        const verification = await publicClient.readContract({
+          address: MASTER_REGISTRY_CONTRACT_ADDRESS,
+          abi: masterTraderRegistryReadAbi,
+          functionName: "getMasterVerification",
+          args: [address],
+        });
+
+        if (!cancelled) {
+          setMasterVerifiedAt(
+            verification.verified && verification.verifiedAt > 0n
+              ? verification.verifiedAt
+              : null,
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setMasterVerifiedAt(null);
+        }
+      }
+    }
+
+    loadMasterVerification();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [address, publicClient]);
 
   React.useEffect(() => {
     const loadPairs = async () => {
@@ -175,11 +232,16 @@ export default function TradePage() {
     setTradeHistoryError(null);
 
     try {
-      const records = await readUserTradeHistoryRecords({
-        publicClient,
-        user: address,
-      });
-      setTradeHistoryRecords(records.toReversed());
+      const [records, closedPositions] = await Promise.all([
+        readUserTradeHistoryRecords({
+          publicClient,
+          user: address,
+        }),
+        getClosedPositionsApi(address).catch(() => []),
+      ]);
+      setTradeHistoryRecords(
+        applyTradeHistorySourceOverrides(records, closedPositions).toReversed(),
+      );
     } catch (error) {
       console.error("Failed to fetch on-chain trade history:", error);
       setTradeHistoryError(
@@ -491,10 +553,26 @@ export default function TradePage() {
         </div>
 
         {isVerifiedMaster && (
-          <div className="ml-auto flex items-center gap-3">
-            <div className="text-right">
-              <div className="font-mono text-[10px] uppercase text-muted-foreground">
-                Copy Mode
+          <div className="ml-auto flex max-w-[320px] items-center gap-3 border border-border bg-surface px-3 py-2">
+            <Info className="h-4 w-4 flex-shrink-0 text-accent" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <div className="font-mono text-[10px] uppercase text-muted-foreground">
+                  Copy Mode
+                </div>
+                <span
+                  className={cn(
+                    "font-mono text-[10px] uppercase",
+                    tradeMode === "COPY" ? "text-accent" : "text-muted-foreground",
+                  )}
+                >
+                  {tradeMode === "COPY" ? "On" : "Off"}
+                </span>
+              </div>
+              <div className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                {tradeMode === "COPY"
+                  ? "New market trades use Copy Wallet and followers can copy them."
+                  : "New trades stay manual and will not be copied by followers."}
               </div>
             </div>
             <Switch
@@ -609,6 +687,7 @@ export default function TradePage() {
               records={tradeHistoryRecords}
               isLoading={isTradeHistoryLoading}
               error={tradeHistoryError}
+              verifiedAt={masterVerifiedAt}
             />
           </>
         )}

@@ -37,6 +37,7 @@ import {
 } from "@/lib/web3/trade-history/format";
 import { TRADE_HISTORY_CONTRACT_ADDRESS } from "@/lib/web3/trade-history/constants";
 import { MASTER_REGISTRY_CONTRACT_ADDRESS } from "@/lib/web3/master-registry/constants";
+import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
 
 const notAvailable = "N/A";
 
@@ -46,6 +47,7 @@ export default function TraderProfilePage() {
     ? params.address[0]
     : params.address;
   const [copyOpen, setCopyOpen] = React.useState(false);
+  const [followers, setFollowers] = React.useState<number | null>(null);
   const {
     profile,
     isLoading,
@@ -65,6 +67,34 @@ export default function TraderProfilePage() {
     profile?.totalPnl === null ||
     profile?.totalPnl === undefined ||
     profile.totalPnl >= 0;
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (!traderAddress) {
+      setFollowers(null);
+      return;
+    }
+
+    async function loadFollowers() {
+      try {
+        const dashboard = await getTraderDashboardApi(traderAddress);
+        if (!cancelled) {
+          setFollowers(dashboard.stats.followers);
+        }
+      } catch {
+        if (!cancelled) {
+          setFollowers(null);
+        }
+      }
+    }
+
+    loadFollowers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [traderAddress]);
 
   const maxDrawdownPercent =
     profile?.tradingVolume !== null &&
@@ -89,7 +119,10 @@ export default function TraderProfilePage() {
     },
     { l: "Win Rate", v: formatUnsignedPercent(profile?.winRate ?? null) },
     { l: "Trading Volume", v: formatUsd(profile?.tradingVolume ?? null) },
-    { l: "Followers", v: notAvailable },
+    {
+      l: "Followers",
+      v: followers === null ? notAvailable : followers.toLocaleString(),
+    },
     {
       l: "Total Trades",
       v: profile ? profile.totalTrades.toLocaleString() : notAvailable,
@@ -369,6 +402,7 @@ export default function TraderProfilePage() {
                   <th className="text-left px-4 py-2.5">Block</th>
                   <th className="text-left px-4 py-2.5">Closed Time</th>
                   <th className="text-left px-4 py-2.5">Symbol</th>
+                  <th className="text-left px-4 py-2.5">Source</th>
                   <th className="text-left px-4 py-2.5">Direction</th>
                   <th className="text-right px-4 py-2.5">Entry Price</th>
                   <th className="text-right px-4 py-2.5">Closing Price</th>
@@ -405,6 +439,9 @@ export default function TraderProfilePage() {
                       </td>
                       <td className="px-4 py-2.5 font-mono text-sm">
                         {trade.symbol || notAvailable}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-accent">
+                        Master Copy
                       </td>
                       <td className="px-4 py-2.5">
                         <span
@@ -452,12 +489,12 @@ export default function TraderProfilePage() {
                 ) : (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-8 text-center font-mono text-sm text-muted-foreground"
                     >
                       {isLoading
                         ? "Loading on-chain trade history..."
-                        : "No on-chain trade history found."}
+                        : "No post-verification master copy trade history found."}
                     </td>
                   </tr>
                 )}

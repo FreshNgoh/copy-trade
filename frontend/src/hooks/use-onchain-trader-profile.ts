@@ -9,6 +9,11 @@ import { readUserTradeHistoryRecords } from "@/lib/web3/trade-history/client";
 import { bytes32ToString } from "@/lib/web3/trade-history/format";
 import { masterTraderRegistryReadAbi } from "@/lib/web3/master-registry/read-abi";
 import { MASTER_REGISTRY_CONTRACT_ADDRESS } from "@/lib/web3/master-registry/constants";
+import { getClosedPositionsApi } from "@/lib/api/position-api";
+import {
+  applyTradeHistorySourceOverrides,
+  TRADE_SOURCE_MASTER_COPY,
+} from "@/lib/web3/trade-history/source";
 
 const MASTER_ROI_DECIMALS = 4;
 const MASTER_VOLUME_DECIMALS = 6;
@@ -87,7 +92,7 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
       setIsLoading(true);
 
       try {
-        const [records, verification] = await Promise.all([
+        const [records, verification, closedPositions] = await Promise.all([
           readUserTradeHistoryRecords({
             publicClient,
             user: normalizedAddress,
@@ -100,9 +105,14 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
                 args: [normalizedAddress],
               })
             : Promise.resolve(null),
+          getClosedPositionsApi(normalizedAddress).catch(() => []),
         ]);
 
-        const mappedRecords = records.map((record) => {
+        const correctedRecords = applyTradeHistorySourceOverrides(
+          records,
+          closedPositions,
+        );
+        const mappedRecords = correctedRecords.map((record) => {
             const symbol = bytes32ToString(record.symbol as Hex);
             const quantity = Number(formatUnits(record.quantity, record.quantityDecimals));
             const entryPrice = Number(formatUnits(record.entryPrice, record.priceDecimals));
@@ -111,7 +121,7 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
               tradeId: record.tradeId,
               blockNumber: record.blockNumber,
               transactionHash: record.transactionHash,
-              source: record.source,
+              source: Number(record.source),
               symbol,
               side: record.direction === 0 ? "LONG" : "SHORT",
               quantity: record.quantity,
@@ -131,10 +141,17 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
             } satisfies OnChainTraderTrade;
         });
 
-        // Copy-reward records belong to the master's reward ledger, not their
-        // executed trade history. Including them here makes a follower's close
-        // look like a trade placed by the master and corrupts profile metrics.
-        const tradeRecords = mappedRecords.filter((record) => record.source !== 2);
+        const verifiedAt =
+          verification && verification.verifiedAt > 0n
+            ? verification.verifiedAt
+            : null;
+        const tradeRecords = verifiedAt
+          ? mappedRecords.filter(
+              (record) =>
+                Number(record.source) === TRADE_SOURCE_MASTER_COPY &&
+                record.closedTime >= verifiedAt,
+            )
+          : [];
         const sortedRecords = [...tradeRecords].sort((a, b) =>
           Number(b.closedTime - a.closedTime),
         );
@@ -177,7 +194,7 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
           setProfile({
             address: normalizedAddress,
             verified: verification ? verification.verified : null,
-            verifiedAt: verification && verification.verifiedAt > 0n ? verification.verifiedAt : null,
+            verifiedAt,
             verifiedBy: verification && verification.verifiedBy !== "0x0000000000000000000000000000000000000000"
               ? verification.verifiedBy
               : null,
