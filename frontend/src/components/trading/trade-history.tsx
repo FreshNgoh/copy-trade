@@ -177,5 +177,5 @@ function TradeSource({ record }: { record: OnChainTradeRecord }) {
     );
   }
 
-  return <span>Own</span>;
+  return <span>Manual</span>;
 }

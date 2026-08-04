@@ -8,15 +8,13 @@
 
 The backend calculates eligibility from `positions` rows where `status = 'CLOSED'`.
 
-- Total closed trades >= `10`
-- Average ROI >= `10%`
-- Total trading volume >= `10,000 USDC`
+- Total closed trades >= `1`
+- Total trading volume >= `50 USDC`
 
 The contract enforces the same minimums:
 
-- `MIN_CLOSED_TRADES = 10`
-- `MIN_ROI = 100000`, meaning `10.0000%`
-- `MIN_TRADING_VOLUME = 10000e6`
+- `MIN_CLOSED_TRADES = 1`
+- `MIN_TRADING_VOLUME = 50e6`
 
 ## Deploy
 

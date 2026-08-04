@@ -300,7 +300,7 @@ export class TraderDashboardRepository {
     const { data: portfolios, error } = await supabase
       .from("portfolio")
       .select(
-        "trader_id,trader_wallet_address,wallet_balance,followers,is_verified_master,master_verified_at,master_verification_tx_hash,master_total_trades,master_roi,master_trading_volume",
+        "trader_id,trader_wallet_address,wallet_balance,followers,is_verified_master,master_verified_at,master_verification_tx_hash,master_verification_block,master_total_trades,master_roi,master_trading_volume",
       )
       .eq("is_verified_master", true)
       .order("master_roi", { ascending: false });
