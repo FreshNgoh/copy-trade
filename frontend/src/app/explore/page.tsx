@@ -6,24 +6,15 @@ import { MasterEligibilityButton } from "@/components/master-trader/master-eligi
 import { VerifiedMasterCard } from "@/components/master-trader/verified-master-card";
 import { cn } from "@/lib/utils";
 import { useVerifiedMasterTraders } from "@/hooks/use-verified-master-traders";
-import { useAccount } from "wagmi";
 
 export default function ExplorePage() {
-  const { address } = useAccount();
   const [search, setSearch] = React.useState("");
-  const [sort, setSort] = React.useState<"roi" | "followers" | "volume" | "trades">("roi");
+  const [sort, setSort] = React.useState<"roi" | "volume" | "trades">("roi");
   const { data: verifiedTraders = [], error, isLoading, isFetching } = useVerifiedMasterTraders();
 
   const filtered = React.useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     const results = verifiedTraders.filter((trader) => {
-      if (
-        address &&
-        trader.traderWalletAddress.toLowerCase() === address.toLowerCase()
-      ) {
-        return false;
-      }
-
       if (!normalizedSearch) return true;
 
       return (
@@ -35,13 +26,11 @@ export default function ExplorePage() {
     return results.sort((a, b) =>
       sort === "roi"
         ? b.roi - a.roi
-        : sort === "followers"
-          ? b.followers - a.followers
-          : sort === "volume"
+        : sort === "volume"
             ? b.tradingVolume - a.tradingVolume
             : b.totalTrades - a.totalTrades,
     );
-  }, [address, search, sort, verifiedTraders]);
+  }, [search, sort, verifiedTraders]);
 
   return (
     <div data-testid="explore-page" className="min-h-screen bg-background">
@@ -58,8 +47,8 @@ export default function ExplorePage() {
               Explore Traders
             </h1>
             <p className="max-w-2xl text-muted-foreground">
-              Browse verified master traders from the portfolio database. Each
-              listing is filtered by verified master status.
+              Browse verified master traders from the MasterTraderRegistry
+              contract. Trade metrics are refreshed from TradeHistory.
             </p>
           </div>
 
@@ -117,7 +106,6 @@ export default function ExplorePage() {
                   <option value="roi">Master ROI</option>
                   <option value="volume">Trading Volume</option>
                   <option value="trades">Total Trades</option>
-                  <option value="followers">Followers</option>
                 </select>
               </div>
             </div>

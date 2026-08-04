@@ -2,17 +2,14 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
   Shield,
   Activity,
   Copy,
   ExternalLink,
-  Twitter,
   Loader2,
   RefreshCcw,
-  ChevronRight,
 } from "lucide-react";
 import { CopySettingsModal } from "@/components/trader/copy-settings-modal";
 import { WalletAvatar } from "@/components/wallet/wallet-avatar";
@@ -38,8 +35,8 @@ import {
   formatRoi,
   formatTimestamp,
 } from "@/lib/web3/trade-history/format";
-import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
-import type { TraderDashboardPosition } from "@/types/trader-dashboard";
+import { TRADE_HISTORY_CONTRACT_ADDRESS } from "@/lib/web3/trade-history/constants";
+import { MASTER_REGISTRY_CONTRACT_ADDRESS } from "@/lib/web3/master-registry/constants";
 
 const notAvailable = "N/A";
 
@@ -49,11 +46,6 @@ export default function TraderProfilePage() {
     ? params.address[0]
     : params.address;
   const [copyOpen, setCopyOpen] = React.useState(false);
-  const [followers, setFollowers] = React.useState<number | null>(null);
-  const [tradingCapital, setTradingCapital] = React.useState<number | null>(null);
-  const [masterCopyPositions, setMasterCopyPositions] = React.useState<
-    TraderDashboardPosition[]
-  >([]);
   const {
     profile,
     isLoading,
@@ -73,55 +65,21 @@ export default function TraderProfilePage() {
     profile?.totalPnl === null ||
     profile?.totalPnl === undefined ||
     profile.totalPnl >= 0;
-  React.useEffect(() => {
-    let cancelled = false;
-
-    if (!traderAddress) {
-      setFollowers(null);
-      setTradingCapital(null);
-      setMasterCopyPositions([]);
-      return;
-    }
-
-    const loadDashboard = async () => {
-      const [dashboardResult] = await Promise.allSettled([
-        getTraderDashboardApi(traderAddress),
-      ]);
-      if (cancelled) return;
-
-      if (dashboardResult.status === "fulfilled") {
-        const dashboard = dashboardResult.value;
-          setFollowers(dashboard.stats.followers);
-          setTradingCapital(dashboard.stats.copyWalletBalance);
-          setMasterCopyPositions(
-            dashboard.activePositions.filter(
-              (position) => position.trade_source === "MASTER_COPY",
-            ),
-          );
-      } else {
-          setFollowers(null);
-          setTradingCapital(null);
-          setMasterCopyPositions([]);
-      }
-
-    };
-
-    loadDashboard();
-    const interval = window.setInterval(loadDashboard, 15_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [traderAddress]);
 
   const maxDrawdownPercent =
-    tradingCapital !== null &&
-    tradingCapital > 0 &&
+    profile?.tradingVolume !== null &&
+    profile?.tradingVolume !== undefined &&
+    profile.tradingVolume > 0 &&
     profile?.maxDrawdown !== null &&
     profile?.maxDrawdown !== undefined
-      ? (profile.maxDrawdown / tradingCapital) * 100
+      ? (profile.maxDrawdown / profile.tradingVolume) * 100
       : null;
+  const tradeHistoryContractUrl = TRADE_HISTORY_CONTRACT_ADDRESS
+    ? `https://sepolia.etherscan.io/address/${TRADE_HISTORY_CONTRACT_ADDRESS}#readContract`
+    : null;
+  const masterRegistryContractUrl = MASTER_REGISTRY_CONTRACT_ADDRESS
+    ? `https://sepolia.etherscan.io/address/${MASTER_REGISTRY_CONTRACT_ADDRESS}#readContract`
+    : null;
 
   const stats = [
     {
@@ -130,11 +88,8 @@ export default function TraderProfilePage() {
       c: getSignedClass(formatPercent(profile?.thirtyDayRoi ?? null)),
     },
     { l: "Win Rate", v: formatUnsignedPercent(profile?.winRate ?? null) },
-    { l: "AUM", v: formatUsd(tradingCapital) },
-    {
-      l: "Followers",
-      v: followers === null ? notAvailable : followers.toLocaleString(),
-    },
+    { l: "Trading Volume", v: formatUsd(profile?.tradingVolume ?? null) },
+    { l: "Followers", v: notAvailable },
     {
       l: "Total Trades",
       v: profile ? profile.totalTrades.toLocaleString() : notAvailable,
@@ -216,14 +171,11 @@ export default function TraderProfilePage() {
                   <Copy className="w-3 h-3" />
                 </button>
                 <p className="text-sm text-muted-foreground mt-3 max-w-2xl leading-relaxed">
-                  On-chain verified master trader profile. Fields not stored in
-                  the smart contracts are shown as {notAvailable}.
+                  On-chain verified master trader profile from TradeHistory and
+                  MasterTraderRegistry. Fields not stored in the smart contracts
+                  are shown as {notAvailable}.
                 </p>
                 <div className="flex flex-wrap gap-3 mt-3">
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Twitter className="w-3 h-3" />
-                    {notAvailable}
-                  </span>
                   {traderAddress ? (
                     <a
                       href={`https://sepolia.etherscan.io/address/${traderAddress}`}
@@ -232,13 +184,35 @@ export default function TraderProfilePage() {
                       className="flex items-center gap-1 text-xs text-muted-foreground hover:text-accent"
                     >
                       <ExternalLink className="w-3 h-3" />
-                      Etherscan
+                      Wallet
                     </a>
                   ) : (
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <ExternalLink className="w-3 h-3" />
                       {notAvailable}
                     </span>
+                  )}
+                  {tradeHistoryContractUrl && (
+                    <a
+                      href={tradeHistoryContractUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-accent"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      TradeHistory
+                    </a>
+                  )}
+                  {masterRegistryContractUrl && (
+                    <a
+                      href={masterRegistryContractUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-accent"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      MasterTraderRegistry
+                    </a>
                   )}
                 </div>
               </div>
@@ -277,26 +251,12 @@ export default function TraderProfilePage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border mb-6">
           {stats.map((s) => (
-            s.l === "Followers" && traderAddress ? (
-            <Link
-              key={s.l}
-              href={`/traders/${traderAddress}/followers`}
-              className="group bg-surface p-4 hover:bg-surface-hover"
-            >
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">
-                {s.l}
-                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
-              </div>
-              <div className={cn("font-mono text-base", s.c)}>{s.v}</div>
-            </Link>
-            ) : (
             <div key={s.l} className="bg-surface p-4">
               <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">
                 {s.l}
               </div>
               <div className={cn("font-mono text-base", s.c)}>{s.v}</div>
             </div>
-            )
           ))}
         </div>
 
@@ -388,47 +348,10 @@ export default function TraderProfilePage() {
               </span>
             </div>
             <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
-              {masterCopyPositions.length > 0 ? (
-                masterCopyPositions.map((position) => (
-                  <div
-                    key={position.position_id}
-                    className="p-3 hover:bg-surface-hover"
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs">
-                          {position.symbol || notAvailable}
-                        </span>
-                        <span
-                          className={cn(
-                            "text-[9px] font-mono uppercase px-1 py-0.5 border",
-                            position.direction === "LONG"
-                              ? "border-success text-success"
-                              : "border-danger text-danger",
-                          )}
-                        >
-                          {position.direction} {position.leverage}×
-                        </span>
-                      </div>
-                      <span className="font-mono text-xs text-accent">
-                        {Number(position.quantity).toLocaleString(undefined, {
-                          maximumFractionDigits: 6,
-                        })}{" "}
-                        {position.symbol.split("/")[0]}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
-                      <span>{new Date(position.created_at).toLocaleString()}</span>
-                      <span>Entry ${Number(position.entry_price).toFixed(2)}</span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-                  <RefreshCcw className="h-4 w-4" />
-                  No active Master Copy positions.
-                </div>
-              )}
+              <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+                <RefreshCcw className="h-4 w-4" />
+                {notAvailable}
+              </div>
             </div>
           </div>
         </div>
@@ -443,6 +366,7 @@ export default function TraderProfilePage() {
             <table className="w-full min-w-[1040px]">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground border-b border-border">
+                  <th className="text-left px-4 py-2.5">Block</th>
                   <th className="text-left px-4 py-2.5">Closed Time</th>
                   <th className="text-left px-4 py-2.5">Symbol</th>
                   <th className="text-left px-4 py-2.5">Direction</th>
@@ -451,7 +375,6 @@ export default function TraderProfilePage() {
                   <th className="text-right px-4 py-2.5">Quantity</th>
                   <th className="text-right px-4 py-2.5">PnL</th>
                   <th className="text-right px-4 py-2.5">ROI</th>
-                  <th className="text-right px-4 py-2.5">Tx</th>
                 </tr>
               </thead>
               <tbody>
@@ -461,6 +384,22 @@ export default function TraderProfilePage() {
                       key={trade.tradeId.toString()}
                       className="border-b border-border hover:bg-surface-hover"
                     >
+                      <td className="px-4 py-2.5 font-mono text-xs">
+                        {trade.blockNumber ? (
+                          <a
+                            href={`https://sepolia.etherscan.io/block/${trade.blockNumber.toString()}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-accent hover:underline"
+                          >
+                            {trade.blockNumber.toString()}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {notAvailable}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
                         {formatTimestamp(trade.closedTime)}
                       </td>
@@ -507,9 +446,6 @@ export default function TraderProfilePage() {
                         )}
                       >
                         {formatRoi(trade.roi, trade.roiDecimals)}
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
-                        {notAvailable}
                       </td>
                     </tr>
                   ))

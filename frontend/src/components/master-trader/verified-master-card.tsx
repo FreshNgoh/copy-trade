@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, TrendingUp, Users } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import type { VerifiedMasterTrader } from "@/types/verified-master";
 import { WalletAvatar } from "@/components/wallet/wallet-avatar";
 
@@ -16,9 +16,11 @@ export function VerifiedMasterCard({
 }: {
   trader: VerifiedMasterTrader;
 }) {
-  const txUrl = trader.verificationTxHash
-    ? `https://sepolia.etherscan.io/tx/${trader.verificationTxHash}`
-    : null;
+  const verificationLabel = trader.verificationBlock
+    ? `Block ${trader.verificationBlock.toLocaleString()}`
+    : trader.verifiedAt
+      ? `Verified ${new Date(trader.verifiedAt).toLocaleDateString()}`
+      : "Verified on-chain";
 
   return (
     <Link
@@ -76,11 +78,12 @@ export function VerifiedMasterCard({
         </div>
         <div>
           <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            Followers
+            Registry Block
           </div>
-          <div className="flex items-center gap-1 font-mono text-sm">
-            <Users className="h-3 w-3" aria-hidden="true" />
-            {trader.followers.toLocaleString()}
+          <div className="font-mono text-sm">
+            {trader.verificationBlock
+              ? trader.verificationBlock.toLocaleString()
+              : "N/A"}
           </div>
         </div>
       </div>
@@ -88,16 +91,8 @@ export function VerifiedMasterCard({
       <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <TrendingUp className="h-3 w-3" aria-hidden="true" />
-          {trader.verifiedAt
-            ? `Verified ${new Date(trader.verifiedAt).toLocaleDateString()}`
-            : "Verified on-chain"}
+          {verificationLabel}
         </span>
-        {txUrl && (
-          <span className="inline-flex items-center gap-1 font-mono text-xs text-accent group-hover:underline">
-            Tx
-            <ExternalLink className="h-3 w-3" aria-hidden="true" />
-          </span>
-        )}
       </div>
     </Link>
   );

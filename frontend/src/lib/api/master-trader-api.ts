@@ -73,7 +73,6 @@ function normalizeEligibility(
 ): MasterEligibilityResponse {
   if (
     typeof data.totalTrades === "object" &&
-    typeof data.roi === "object" &&
     typeof data.tradingVolume === "object" &&
     data.status
   ) {
@@ -82,13 +81,12 @@ function normalizeEligibility(
 
   const totalTradesActual =
     data.requirements?.totalTrades?.actual ?? numberValue(data.totalTrades);
-  const totalTradesTarget = data.requirements?.totalTrades?.required ?? 10;
+  const totalTradesTarget = data.requirements?.totalTrades?.required ?? 1;
   const roiActual = data.requirements?.roi?.actual ?? numberValue(data.roi);
-  const roiTarget = data.requirements?.roi?.required ?? 10;
   const volumeActual =
     data.requirements?.tradingVolume?.actual ??
     numberValue(data.tradingVolume);
-  const volumeTarget = data.requirements?.tradingVolume?.required ?? 10_000;
+  const volumeTarget = data.requirements?.tradingVolume?.required ?? 50;
   const alreadyVerified =
     data.alreadyVerified ?? Boolean(data.portfolio?.isVerifiedMaster);
   const backendStatus =
@@ -96,7 +94,6 @@ function normalizeEligibility(
   const eligible =
     data.eligible ??
     (totalTradesActual >= totalTradesTarget &&
-      roiActual >= roiTarget &&
       volumeActual >= volumeTarget);
   const status = alreadyVerified
     ? "VERIFIED"
@@ -117,8 +114,8 @@ function normalizeEligibility(
     },
     roi: {
       current: `${formatNumber(roiActual)}%`,
-      target: `${formatNumber(roiTarget)}%`,
-      met: data.requirements?.roi?.passed ?? roiActual >= roiTarget,
+      target: "Not required",
+      met: true,
     },
     tradingVolume: {
       current: `${formatNumber(volumeActual)} USDC`,

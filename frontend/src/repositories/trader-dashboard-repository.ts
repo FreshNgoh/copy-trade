@@ -322,7 +322,6 @@ export class TraderDashboardRepository {
         master_verification_error: null,
       })
       .ilike("trader_wallet_address", traderWalletAddress)
-      .eq("is_verified_master", false)
       .neq("master_status", "PENDING")
       .select()
       .maybeSingle();
