@@ -131,6 +131,7 @@ export type OnChainTradeMetrics = {
   tradingVolume: number;
 };
 
+const TRADE_SOURCE_OWN = 0;
 const tradeHistoryInterface = new Interface(TRADE_HISTORY_WRITE_ABI);
 
 export function stringToBytes32(value: string) {
@@ -221,9 +222,10 @@ export async function getOnChainTradeMetrics(traderWalletAddress: string): Promi
   const contract = new Contract(getAddress(contractAddress), TRADE_HISTORY_READ_ABI, provider);
   const tradeIds: bigint[] = await contract.getUserTradeIds(getAddress(traderWalletAddress));
   const records = await Promise.all(tradeIds.map((tradeId) => contract.getTradeRecord(tradeId)));
+  const manualRecords = records.filter((record) => Number(record.source) === TRADE_SOURCE_OWN);
 
-  const totalTrades = records.length;
-  const tradingVolume = records.reduce((total, record) => {
+  const totalTrades = manualRecords.length;
+  const tradingVolume = manualRecords.reduce((total, record) => {
     const quantity = Number(formatUnits(record.quantity, record.quantityDecimals));
     const entryPrice = Number(formatUnits(record.entryPrice, record.priceDecimals));
 
@@ -232,7 +234,7 @@ export async function getOnChainTradeMetrics(traderWalletAddress: string): Promi
   const roi =
     totalTrades === 0
       ? 0
-      : records.reduce((total, record) => total + Number(formatUnits(record.roi, record.roiDecimals)), 0) /
+      : manualRecords.reduce((total, record) => total + Number(formatUnits(record.roi, record.roiDecimals)), 0) /
         totalTrades;
 
   return {

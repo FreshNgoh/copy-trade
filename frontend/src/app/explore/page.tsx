@@ -47,8 +47,8 @@ export default function ExplorePage() {
               Explore Traders
             </h1>
             <p className="max-w-2xl text-muted-foreground">
-              Browse verified master traders from the MasterTraderRegistry
-              contract. Trade metrics are refreshed from TradeHistory.
+              Browse master traders confirmed by the current
+              MasterTraderRegistry contract.
             </p>
           </div>
 

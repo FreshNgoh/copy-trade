@@ -54,8 +54,8 @@ export function MasterEligibilityModal({
               Master Trader Eligibility
             </DialogTitle>
             <DialogDescription>
-              Meet both requirements to become a verified master trader and allow
-              other users to copy your trades.
+              Meet both manual-trade requirements to become a verified master
+              trader and allow other users to copy your trades.
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -194,14 +194,14 @@ function getRequirementRows(
   return [
     {
       key: "totalTrades",
-      label: "Total Trades",
+      label: "Manual Trades",
       current: String(eligibility.totalTrades.current),
       target: String(eligibility.totalTrades.target),
       met: eligibility.totalTrades.met,
     },
     {
       key: "tradingVolume",
-      label: "Trading Volume",
+      label: "Manual Trading Volume",
       current: eligibility.tradingVolume.current,
       target: eligibility.tradingVolume.target,
       met: eligibility.tradingVolume.met,

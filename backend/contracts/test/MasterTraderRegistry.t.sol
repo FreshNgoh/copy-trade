@@ -33,57 +33,51 @@ contract MasterTraderRegistryTest is Test {
 
     function testVerifierCanVerifyMaster() public {
         vm.prank(verifier);
-        registry.verifyMaster(trader, 10, 100_000, 10_000e6);
+        registry.verifyMaster(trader, 1, -25_000, 50e6);
 
         assertTrue(registry.isVerifiedMaster(trader));
 
         MasterTraderRegistry.MasterVerification memory verification = registry.getMasterVerification(trader);
         assertTrue(verification.verified);
         assertEq(verification.verifiedBy, verifier);
-        assertEq(verification.totalTrades, 10);
-        assertEq(verification.roi, 100_000);
-        assertEq(verification.tradingVolume, 10_000e6);
+        assertEq(verification.totalTrades, 1);
+        assertEq(verification.roi, -25_000);
+        assertEq(verification.tradingVolume, 50e6);
     }
 
     function testUnauthorizedCannotVerifyMaster() public {
         vm.prank(unauthorized);
         vm.expectRevert(abi.encodeWithSelector(MasterTraderRegistry.UnauthorizedVerifier.selector, unauthorized));
-        registry.verifyMaster(trader, 10, 100_000, 10_000e6);
+        registry.verifyMaster(trader, 1, 10_000, 50e6);
     }
 
     function testCannotVerifyZeroTrader() public {
         vm.prank(verifier);
         vm.expectRevert(MasterTraderRegistry.InvalidTrader.selector);
-        registry.verifyMaster(address(0), 10, 100_000, 10_000e6);
+        registry.verifyMaster(address(0), 1, 10_000, 50e6);
     }
 
     function testCannotVerifyTwice() public {
         vm.startPrank(verifier);
-        registry.verifyMaster(trader, 10, 100_000, 10_000e6);
+        registry.verifyMaster(trader, 1, 10_000, 50e6);
 
         vm.expectRevert(abi.encodeWithSelector(MasterTraderRegistry.AlreadyVerified.selector, trader));
-        registry.verifyMaster(trader, 10, 100_000, 10_000e6);
+        registry.verifyMaster(trader, 1, 10_000, 50e6);
         vm.stopPrank();
     }
 
     function testRejectsInsufficientClosedTrades() public {
         vm.prank(verifier);
-        vm.expectRevert(abi.encodeWithSelector(MasterTraderRegistry.InsufficientClosedTrades.selector, 9));
-        registry.verifyMaster(trader, 9, 100_000, 10_000e6);
-    }
-
-    function testRejectsInsufficientRoi() public {
-        vm.prank(verifier);
-        vm.expectRevert(abi.encodeWithSelector(MasterTraderRegistry.InsufficientRoi.selector, int256(99_999)));
-        registry.verifyMaster(trader, 10, 99_999, 10_000e6);
+        vm.expectRevert(abi.encodeWithSelector(MasterTraderRegistry.InsufficientClosedTrades.selector, 0));
+        registry.verifyMaster(trader, 0, 10_000, 50e6);
     }
 
     function testRejectsInsufficientTradingVolume() public {
         vm.prank(verifier);
         vm.expectRevert(
-            abi.encodeWithSelector(MasterTraderRegistry.InsufficientTradingVolume.selector, uint256(9_999e6))
+            abi.encodeWithSelector(MasterTraderRegistry.InsufficientTradingVolume.selector, uint256(49e6))
         );
-        registry.verifyMaster(trader, 10, 100_000, 9_999e6);
+        registry.verifyMaster(trader, 1, 10_000, 49e6);
     }
 
     function testEventEmission() public {
@@ -91,7 +85,7 @@ contract MasterTraderRegistryTest is Test {
 
         vm.prank(verifier);
         vm.expectEmit(true, true, false, true, address(registry));
-        emit MasterTraderVerified(trader, verifier, 10, 100_000, 10_000e6, block.timestamp);
-        registry.verifyMaster(trader, 10, 100_000, 10_000e6);
+        emit MasterTraderVerified(trader, verifier, 1, 10_000, 50e6, block.timestamp);
+        registry.verifyMaster(trader, 1, 10_000, 50e6);
     }
 }

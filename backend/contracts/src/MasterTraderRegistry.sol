@@ -11,16 +11,10 @@ contract MasterTraderRegistry is AccessControl {
     bytes32 public constant MASTER_VERIFIER_ROLE = keccak256("MASTER_VERIFIER_ROLE");
 
     /// @notice Minimum closed trades required for verification.
-    uint256 public constant MIN_CLOSED_TRADES = 10;
-
-    /// @notice Minimum average ROI percentage, scaled by ROI_SCALE.
-    int256 public constant MIN_ROI = 10 * 10_000;
+    uint256 public constant MIN_CLOSED_TRADES = 1;
 
     /// @notice Minimum total trading volume in USDC, scaled to 6 decimals.
-    uint256 public constant MIN_TRADING_VOLUME = 10_000e6;
-
-    /// @notice ROI scale. 10.0000% is stored as 100000.
-    uint256 public constant ROI_SCALE = 10_000;
+    uint256 public constant MIN_TRADING_VOLUME = 50e6;
 
     /// @notice Verification snapshot stored for each master trader.
     /// @param verified Whether the trader is verified.
@@ -51,7 +45,6 @@ contract MasterTraderRegistry is AccessControl {
     error InvalidTrader();
     error AlreadyVerified(address trader);
     error InsufficientClosedTrades(uint256 totalTrades);
-    error InsufficientRoi(int256 roi);
     error InsufficientTradingVolume(uint256 tradingVolume);
 
     mapping(address trader => MasterVerification verification) private _verifications;
@@ -77,7 +70,6 @@ contract MasterTraderRegistry is AccessControl {
         if (trader == address(0)) revert InvalidTrader();
         if (_verifications[trader].verified) revert AlreadyVerified(trader);
         if (totalTrades < MIN_CLOSED_TRADES) revert InsufficientClosedTrades(totalTrades);
-        if (roi < MIN_ROI) revert InsufficientRoi(roi);
         if (tradingVolume < MIN_TRADING_VOLUME) revert InsufficientTradingVolume(tradingVolume);
 
         _verifications[trader] = MasterVerification({
