@@ -36,7 +36,7 @@ export type MasterEligibilityResponse = {
 };
 
 export type EligibilityRequirement = {
-  key: "totalTrades" | "roi" | "tradingVolume";
+  key: "totalTrades" | "tradingVolume";
   label: string;
   current: string;
   target: string;

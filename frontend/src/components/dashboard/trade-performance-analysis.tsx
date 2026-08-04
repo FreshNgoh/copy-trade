@@ -146,7 +146,20 @@ export function TradePerformanceAnalysis({
         </div>
         <div className="max-h-60 overflow-auto"><table className="w-full"><thead><tr className="border-b border-border text-[9px] font-mono uppercase tracking-wider text-muted-foreground"><th className="px-4 py-2.5 text-left">Block</th><th className="px-4 py-2.5 text-left">Market</th><th className="px-4 py-2.5 text-left">Direction</th><th className="px-4 py-2.5 text-left">Source</th><th className="px-4 py-2.5 text-right">ROI</th><th className="px-4 py-2.5 text-right">PnL</th></tr></thead><tbody>{trades.slice(0, 20).map((trade) => (
             <tr key={trade.tradeId.toString()} className="border-b border-border text-xs last:border-0">
-              <td className="px-4 py-3 font-mono text-muted-foreground">{trade.blockNumber ? trade.blockNumber.toString() : "-"}</td>
+              <td className="px-4 py-3 font-mono">
+                {trade.blockNumber ? (
+                  <a
+                    href={`https://sepolia.etherscan.io/block/${trade.blockNumber.toString()}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-accent hover:text-white"
+                  >
+                    {trade.blockNumber.toString()}
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
+                )}
+              </td>
               <td className="px-4 py-3 font-mono text-accent">{symbol(trade)}</td>
               <td className="px-4 py-3 font-mono">{direction(trade)}</td>
               <td className="px-4 py-3 text-muted-foreground">{isCopy(trade) ? "Copy" : "Manual"}</td>

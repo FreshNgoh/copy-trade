@@ -4,8 +4,8 @@ import * as React from "react";
 import { formatUnits, isAddress, type Address, type Hex } from "viem";
 import { usePublicClient } from "wagmi";
 import { sepolia } from "wagmi/chains";
-import { tradeHistoryAbi } from "@/lib/web3/trade-history/abi";
 import { TRADE_HISTORY_CONTRACT_ADDRESS } from "@/lib/web3/trade-history/constants";
+import { readUserTradeHistoryRecords } from "@/lib/web3/trade-history/client";
 import { bytes32ToString } from "@/lib/web3/trade-history/format";
 import { masterTraderRegistryReadAbi } from "@/lib/web3/master-registry/read-abi";
 import { MASTER_REGISTRY_CONTRACT_ADDRESS } from "@/lib/web3/master-registry/constants";
@@ -15,6 +15,8 @@ const MASTER_VOLUME_DECIMALS = 6;
 
 export type OnChainTraderTrade = {
   tradeId: bigint;
+  blockNumber?: bigint | null;
+  transactionHash?: Hex | null;
   source: number;
   symbol: string;
   side: "LONG" | "SHORT";
@@ -85,12 +87,10 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
       setIsLoading(true);
 
       try {
-        const [tradeIds, verification] = await Promise.all([
-          publicClient.readContract({
-            address: TRADE_HISTORY_CONTRACT_ADDRESS,
-            abi: tradeHistoryAbi,
-            functionName: "getUserTradeIds",
-            args: [normalizedAddress],
+        const [records, verification] = await Promise.all([
+          readUserTradeHistoryRecords({
+            publicClient,
+            user: normalizedAddress,
           }),
           MASTER_REGISTRY_CONTRACT_ADDRESS
             ? publicClient.readContract({
@@ -102,21 +102,15 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
             : Promise.resolve(null),
         ]);
 
-        const records = await Promise.all(
-          tradeIds.map(async (tradeId) => {
-            const record = await publicClient.readContract({
-              address: TRADE_HISTORY_CONTRACT_ADDRESS,
-              abi: tradeHistoryAbi,
-              functionName: "getTradeRecord",
-              args: [tradeId],
-            });
-
+        const mappedRecords = records.map((record) => {
             const symbol = bytes32ToString(record.symbol as Hex);
             const quantity = Number(formatUnits(record.quantity, record.quantityDecimals));
             const entryPrice = Number(formatUnits(record.entryPrice, record.priceDecimals));
 
             return {
-              tradeId,
+              tradeId: record.tradeId,
+              blockNumber: record.blockNumber,
+              transactionHash: record.transactionHash,
               source: record.source,
               symbol,
               side: record.direction === 0 ? "LONG" : "SHORT",
@@ -135,13 +129,12 @@ export function useOnChainTraderProfile(addressParam: string | undefined) {
                 ? quantity * entryPrice
                 : null,
             } satisfies OnChainTraderTrade;
-          })
-        );
+        });
 
         // Copy-reward records belong to the master's reward ledger, not their
         // executed trade history. Including them here makes a follower's close
         // look like a trade placed by the master and corrupts profile metrics.
-        const tradeRecords = records.filter((record) => record.source !== 2);
+        const tradeRecords = mappedRecords.filter((record) => record.source !== 2);
         const sortedRecords = [...tradeRecords].sort((a, b) =>
           Number(b.closedTime - a.closedTime),
         );

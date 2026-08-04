@@ -9,4 +9,5 @@ export type VerifiedMasterTrader = {
   tradingVolume: number;
   verifiedAt: string | null;
   verificationTxHash: string | null;
+  verificationBlock: number | null;
 };

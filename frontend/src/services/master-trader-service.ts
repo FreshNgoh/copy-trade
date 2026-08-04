@@ -1,12 +1,14 @@
 import { getAddress, isAddress } from "ethers";
 import { traderDashboardRepository } from "@/repositories/trader-dashboard-repository";
-import { verifyMasterOnChain } from "@/lib/web3/master-registry/server";
+import {
+  getMasterVerificationOnChain,
+  verifyMasterOnChain,
+} from "@/lib/web3/master-registry/server";
 import { getOnChainTradeMetrics } from "@/lib/web3/trade-history/server";
 
 export const MASTER_REQUIREMENTS = {
-  minClosedTrades: 10,
-  minRoi: 10,
-  minTradingVolume: 10_000,
+  minClosedTrades: 1,
+  minTradingVolume: 50,
 } as const;
 
 export type MasterEligibility = {
@@ -17,7 +19,6 @@ export type MasterEligibility = {
   tradingVolume: number;
   requirements: {
     totalTrades: RequirementStatus;
-    roi: RequirementStatus;
     tradingVolume: RequirementStatus;
   };
   portfolio: {
@@ -46,9 +47,10 @@ function assertWalletAddress(traderWalletAddress: string) {
 
 export async function getMasterEligibility(traderWalletAddress: string): Promise<MasterEligibility> {
   const wallet = assertWalletAddress(traderWalletAddress);
-  const [portfolio, onChainMetrics] = await Promise.all([
+  const [portfolio, onChainMetrics, chainVerification] = await Promise.all([
     traderDashboardRepository.ensurePortfolio(wallet),
     getOnChainTradeMetrics(wallet),
+    getMasterVerificationOnChain(wallet),
   ]);
 
   const totalTrades = onChainMetrics.totalTrades;
@@ -61,11 +63,6 @@ export async function getMasterEligibility(traderWalletAddress: string): Promise
       actual: totalTrades,
       passed: totalTrades >= MASTER_REQUIREMENTS.minClosedTrades,
     },
-    roi: {
-      required: MASTER_REQUIREMENTS.minRoi,
-      actual: roi,
-      passed: roi >= MASTER_REQUIREMENTS.minRoi,
-    },
     tradingVolume: {
       required: MASTER_REQUIREMENTS.minTradingVolume,
       actual: tradingVolume,
@@ -75,15 +72,15 @@ export async function getMasterEligibility(traderWalletAddress: string): Promise
 
   return {
     traderWalletAddress: wallet,
-    eligible: requirements.totalTrades.passed && requirements.roi.passed && requirements.tradingVolume.passed,
+    eligible: requirements.totalTrades.passed && requirements.tradingVolume.passed,
     totalTrades,
     roi,
     tradingVolume,
     requirements,
     portfolio: {
       masterStatus: portfolio.master_status ?? "NONE",
-      isVerifiedMaster: Boolean(portfolio.is_verified_master),
-      masterVerifiedAt: portfolio.master_verified_at ?? null,
+      isVerifiedMaster: Boolean(chainVerification?.verified),
+      masterVerifiedAt: chainVerification?.verifiedAt ?? portfolio.master_verified_at ?? null,
       masterVerificationTxHash: portfolio.master_verification_tx_hash ?? null,
       masterVerificationBlock: portfolio.master_verification_block ? Number(portfolio.master_verification_block) : null,
       masterVerificationError: portfolio.master_verification_error ?? null,

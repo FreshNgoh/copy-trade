@@ -44,7 +44,6 @@ export function HistoryTable({
         <table className="w-full min-w-[1120px]">
           <thead>
             <tr className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground border-b border-border">
-              <th className="text-left px-4 py-2">ID</th>
               <th className="text-left px-4 py-2">Block</th>
               <th className="text-left px-4 py-2">Symbol</th>
               <th className="text-left px-4 py-2">Source</th>
@@ -70,9 +69,6 @@ export function HistoryTable({
                   key={record.tradeId.toString()}
                   className="border-b border-border hover:bg-surface-hover"
                 >
-                  <td className="px-4 py-2.5 font-mono text-sm text-muted-foreground">
-                    {record.tradeId.toString()}
-                  </td>
                   <td className="px-4 py-2.5 font-mono text-xs">
                     {record.blockNumber ? (
                       <a
