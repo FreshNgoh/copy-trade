@@ -1,99 +1,78 @@
-# Copy Trade
+# KopiTrade
 
-## Supabase setup
+KopiTrade is a Next.js copy-trading dashboard with wallet connectivity, Supabase-backed data, and optional Sepolia smart-contract integrations.
 
-1. Create a Supabase project.
-2. In Supabase, open SQL Editor and run `supabase-trader-profiles.sql`.
-3. Add your Supabase values to `backend/.env`:
+## Quick start
 
-```bash
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_PUBLISHABLE_KEY=your-publishable-key
-SUPABASE_SECRET_KEY=your-secret-key
-SUPABASE_JWKS_URL=https://your-project.supabase.co/auth/v1/.well-known/jwks.json
-```
+### Prerequisites
 
-4. Start the frontend:
+- Node.js 18.17 or newer
+- npm (included with Node.js)
+
+### Run the app
+
+From the repository root:
 
 ```bash
 cd frontend
-yarn dev
+npm install
+cp .env.example .env.local
+npm run dev
 ```
 
-The backend-owned trader profile request handlers live in `backend/supabaseCrud.js`.
-They use `withSupabase` from `@supabase/server`, so normal requests go through
-`ctx.supabase` with RLS and admin/server-to-server requests can use
-`ctx.supabaseAdmin`.
+Then open [http://localhost:3000](http://localhost:3000).
 
-## Original notes
+The development server listens on `0.0.0.0`, so another device on the same network can open it at `http://<your-computer-ip>:3000`. Make sure your firewall permits incoming connections to port 3000.
 
-# Getting Started with Create React App
+## Environment configuration
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Edit `frontend/.env.local` after copying the example file. At minimum, configure these values for Supabase-backed pages and API routes:
 
-## Available Scripts
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
 
-In the project directory, you can run:
+The service-role key is server-only. Never prefix it with `NEXT_PUBLIC_`, commit `.env.local`, or expose it in browser code.
 
-### `npm start`
+Other variables in `.env.example` enable wallet connection, Sepolia RPC access, and deployed contract features. The interface can start without all contract addresses, but their related features will remain unavailable until configured.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+To prepare a Supabase project, run the tracked `frontend/SUPABASE_*.sql` migrations in the Supabase SQL Editor. Apply the base table migration before migrations that alter or merge table data.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Useful commands
 
-### `npm test`
+Run these inside `frontend`:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```bash
+npm run dev      # development server on port 3000
+npm run build    # production build
+npm run serve    # serve the production build on port 3000
+```
 
-### `npm run build`
+For a production-style local run:
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```bash
+npm run build
+npm run serve
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Backend contract utilities
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+The `backend` directory contains TypeScript blockchain services and Solidity contract tooling; it is not a separate HTTP server required to open the web app.
 
-### `npm run eject`
+To type-check those utilities:
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```bash
+cd backend
+npm install
+npm run typecheck
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+See `backend/contracts/README.md` and `backend/TRADE_HISTORY_INTEGRATION.md` for contract-specific setup.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Troubleshooting
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- If port 3000 is already in use, stop the other process before starting KopiTrade.
+- If a page reports missing Supabase variables, confirm `frontend/.env.local` contains both Supabase values and restart the dev server.
+- If wallet connection is unavailable, set `NEXT_PUBLIC_WC_PROJECT_ID` to a WalletConnect Cloud project ID.
+- A production build needs internet access the first time Next.js downloads the Google fonts used by the application.
