@@ -19,7 +19,7 @@ if (typeof window !== "undefined" && projectId) {
 }
 
 export const wagmiConfig = getDefaultConfig({
-  appName: "Alphavault — Web3 Copy Trading",
+  appName: "KopiTrade — Web3 Copy Trading",
   projectId,
   wallets: [
     {

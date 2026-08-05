@@ -66,7 +66,7 @@ export function Navbar() {
               className="font-heading text-base font-bold tracking-tighter"
               style={{ fontFamily: "var(--font-unbounded)" }}
             >
-              ALPHAVAULT
+              KOPITRADE
             </span>
             <span className="hidden md:inline-flex font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground border border-border px-1.5 py-0.5">
               ON-CHAIN

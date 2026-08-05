@@ -1,5 +1,9 @@
+"use client";
+
+import * as React from "react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   bytes32ToString,
   formatPnl,
@@ -32,6 +36,16 @@ export function HistoryTable({
   error?: string | null;
   verifiedAt?: bigint | null;
 }) {
+  const pageSize = 10;
+  const [page, setPage] = React.useState(1);
+  const totalPages = Math.max(Math.ceil(records.length / pageSize), 1);
+  const currentPage = Math.min(page, totalPages);
+  const visibleRecords = records.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  React.useEffect(() => {
+    setPage((previous) => Math.min(previous, totalPages));
+  }, [totalPages]);
+
   if (error) {
     return (
       <div className="border-b border-border px-4 py-8 text-center text-sm text-danger">
@@ -47,6 +61,7 @@ export function HistoryTable({
       }
     />
   ) : (
+    <div>
     <div className="overflow-x-auto">
       {
         <table className="w-full min-w-[1120px]">
@@ -66,7 +81,7 @@ export function HistoryTable({
             </tr>
           </thead>
           <tbody>
-            {records.map((record) => {
+            {visibleRecords.map((record) => {
               const symbol = bytes32ToString(record.symbol);
               const isProfit = record.pnl >= 0n;
 
@@ -146,6 +161,8 @@ export function HistoryTable({
           </tbody>
         </table>
       }
+    </div>
+      <PaginationControls page={currentPage} totalItems={records.length} pageSize={pageSize} onPageChange={setPage} />
     </div>
   );
 }

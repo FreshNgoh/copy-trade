@@ -59,10 +59,12 @@ export async function getVerifiedMasterTraders(): Promise<VerifiedMasterTrader[]
         traderId: address,
         traderWalletAddress: address as `0x${string}`,
         displayName: shortAddress(address),
-        followers: 0,
-        walletBalance: 0,
+        followers: Number(portfolio.followers || 0),
+        walletBalance: Number(portfolio.wallet_balance || 0),
         totalTrades: masterTradeMetrics.totalTrades,
         roi: masterTradeMetrics.roi,
+        winRate: masterTradeMetrics.winRate,
+        roiHistory: masterTradeMetrics.roiHistory,
         tradingVolume: masterTradeMetrics.tradingVolume,
         verifiedAt:
           verification.verifiedAt > 0n

@@ -23,7 +23,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Alphavault — On-Chain Copy Trading Terminal',
+  title: 'KopiTrade — On-Chain Copy Trading Terminal',
   description:
     'The first fully decentralized, non-custodial copy trading terminal. Follow top wallets automatically. Keep control of your funds.',
 };

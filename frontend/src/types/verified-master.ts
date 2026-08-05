@@ -6,6 +6,8 @@ export type VerifiedMasterTrader = {
   walletBalance: number;
   totalTrades: number;
   roi: number;
+  winRate: number;
+  roiHistory: number[];
   tradingVolume: number;
   verifiedAt: string | null;
   verificationTxHash: string | null;

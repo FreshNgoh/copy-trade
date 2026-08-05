@@ -6,10 +6,14 @@ import { MasterEligibilityButton } from "@/components/master-trader/master-eligi
 import { VerifiedMasterCard } from "@/components/master-trader/verified-master-card";
 import { cn } from "@/lib/utils";
 import { useVerifiedMasterTraders } from "@/hooks/use-verified-master-traders";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+
+const PAGE_SIZE = 9;
 
 export default function ExplorePage() {
   const [search, setSearch] = React.useState("");
   const [sort, setSort] = React.useState<"roi" | "volume" | "trades">("roi");
+  const [page, setPage] = React.useState(1);
   const { data: verifiedTraders = [], error, isLoading, isFetching } = useVerifiedMasterTraders();
 
   const filtered = React.useMemo(() => {
@@ -31,6 +35,14 @@ export default function ExplorePage() {
             : b.totalTrades - a.totalTrades,
     );
   }, [search, sort, verifiedTraders]);
+  const totalPages = Math.max(Math.ceil(filtered.length / PAGE_SIZE), 1);
+  const currentPage = Math.min(page, totalPages);
+  const visibleTraders = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  React.useEffect(() => setPage(1), [search, sort]);
+  React.useEffect(() => {
+    setPage((previous) => Math.min(previous, totalPages));
+  }, [totalPages]);
 
   return (
     <div data-testid="explore-page" className="min-h-screen bg-background">
@@ -143,7 +155,7 @@ export default function ExplorePage() {
                 className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
                 data-testid="trader-grid"
               >
-                {filtered.map((trader) => (
+                {visibleTraders.map((trader) => (
                   <VerifiedMasterCard
                     key={trader.traderId}
                     trader={trader}
@@ -151,6 +163,7 @@ export default function ExplorePage() {
                 ))}
               </div>
             )}
+            <PaginationControls page={currentPage} totalItems={filtered.length} pageSize={PAGE_SIZE} onPageChange={setPage} />
           </div>
         </div>
       </div>

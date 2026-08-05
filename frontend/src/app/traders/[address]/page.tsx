@@ -40,8 +40,10 @@ import { TRADE_HISTORY_CONTRACT_ADDRESS } from "@/lib/web3/trade-history/constan
 import { MASTER_REGISTRY_CONTRACT_ADDRESS } from "@/lib/web3/master-registry/constants";
 import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
 import type { TraderDashboardPosition } from "@/types/trader-dashboard";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 
 const notAvailable = "N/A";
+const HISTORY_PAGE_SIZE = 10;
 
 export default function TraderProfilePage() {
   const params = useParams<{ address?: string | string[] }>();
@@ -55,6 +57,7 @@ export default function TraderProfilePage() {
   >([]);
   const [activePositionsLoading, setActivePositionsLoading] =
     React.useState(false);
+  const [historyPage, setHistoryPage] = React.useState(1);
   const {
     profile,
     isLoading,
@@ -74,6 +77,17 @@ export default function TraderProfilePage() {
     profile?.totalPnl === null ||
     profile?.totalPnl === undefined ||
     profile.totalPnl >= 0;
+  const historyTotalPages = Math.max(Math.ceil((profile?.trades.length ?? 0) / HISTORY_PAGE_SIZE), 1);
+  const currentHistoryPage = Math.min(historyPage, historyTotalPages);
+  const visibleHistory = (profile?.trades ?? []).slice(
+    (currentHistoryPage - 1) * HISTORY_PAGE_SIZE,
+    currentHistoryPage * HISTORY_PAGE_SIZE,
+  );
+
+  React.useEffect(() => setHistoryPage(1), [traderAddress]);
+  React.useEffect(() => {
+    setHistoryPage((previous) => Math.min(previous, historyTotalPages));
+  }, [historyTotalPages]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -509,7 +523,7 @@ export default function TraderProfilePage() {
               </thead>
               <tbody>
                 {profile && profile.trades.length > 0 ? (
-                  profile.trades.map((trade) => (
+                  visibleHistory.map((trade) => (
                     <tr
                       key={trade.tradeId.toString()}
                       className="border-b border-border hover:bg-surface-hover"
@@ -597,6 +611,12 @@ export default function TraderProfilePage() {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            page={currentHistoryPage}
+            totalItems={profile?.trades.length ?? 0}
+            pageSize={HISTORY_PAGE_SIZE}
+            onPageChange={setHistoryPage}
+          />
         </div>
       </div>
 

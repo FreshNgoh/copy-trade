@@ -4,40 +4,55 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAccount } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { ArrowRight, Shield, Zap, Eye, Lock } from "lucide-react";
-import { TRADERS, PLATFORM_STATS } from "@/lib/mock-data";
-import { TraderCard } from "@/components/trader/trader-card";
-
-const TICKER_ITEMS = [
-  { pair: "ETH/USDC", price: "$3,489.21", change: "+2.41%", up: true },
-  { pair: "BTC/USDC", price: "$67,455.00", change: "+0.95%", up: true },
-  { pair: "SOL/USDC", price: "$188.10", change: "-1.18%", up: false },
-  { pair: "ARB/USDC", price: "$0.79", change: "-5.95%", up: false },
-  // { pair: 'PEPE/USDC', price: '$0.000018', change: '+12.40%', up: true },
-  { pair: "LINK/USDC", price: "$15.84", change: "+3.20%", up: true },
-  { pair: "OP/USDC", price: "$2.41", change: "-0.88%", up: false },
-  { pair: "AVAX/USDC", price: "$38.21", change: "+1.74%", up: true },
-];
+import { ArrowRight, Shield, Zap, Eye, Lock, Loader2 } from "lucide-react";
+import { VerifiedMasterCard } from "@/components/master-trader/verified-master-card";
+import { WalletAvatar } from "@/components/wallet/wallet-avatar";
+import { useVerifiedMasterTraders } from "@/hooks/use-verified-master-traders";
+import { useMarketTickers } from "@/hooks/use-market-tickers";
 
 export default function LandingPage() {
   const { isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  const topTraders = TRADERS.slice(0, 4);
+  const marketTickers = useMarketTickers();
+  const { data: verifiedTraders = [], isLoading } = useVerifiedMasterTraders();
+  const topTraders = [...verifiedTraders]
+    .sort((a, b) => b.roi - a.roi)
+    .slice(0, 4);
+  const leader = topTraders[0];
+  const totalVolume = verifiedTraders.reduce(
+    (sum, trader) => sum + trader.tradingVolume,
+    0,
+  );
+  const totalValue = verifiedTraders.reduce(
+    (sum, trader) => sum + trader.walletBalance,
+    0,
+  );
+  const averageRoi = verifiedTraders.length
+    ? verifiedTraders.reduce((sum, trader) => sum + trader.roi, 0) /
+      verifiedTraders.length
+    : 0;
+  const formatUsd = (value: number) =>
+    `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
   return (
     <div data-testid="landing-page" className="bg-background overflow-hidden">
       {/* Ticker */}
       <div className="border-b border-border bg-surface overflow-hidden">
         <div className="flex marquee whitespace-nowrap py-2.5">
-          {[...TICKER_ITEMS, ...TICKER_ITEMS].map((t, i) => (
+          {[...marketTickers, ...marketTickers].map((ticker, index) => (
             <div
-              key={i}
+              key={`${ticker.pair}-${index}`}
               className="inline-flex items-center gap-3 px-6 font-mono text-xs"
             >
-              <span className="text-muted-foreground">{t.pair}</span>
-              <span>{t.price}</span>
-              <span className={t.up ? "text-success" : "text-danger"}>
-                {t.change}
+              <span className="text-muted-foreground">{ticker.pair}</span>
+              <span>
+                ${ticker.price.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+              <span className={ticker.change >= 0 ? "text-success" : "text-danger"}>
+                {ticker.change >= 0 ? "+" : ""}{ticker.change.toFixed(2)}%
               </span>
               <span className="text-border">•</span>
             </div>
@@ -103,17 +118,17 @@ export default function LandingPage() {
             {/* Inline stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border max-w-2xl">
               {[
-                { label: "Total Volume", value: PLATFORM_STATS.totalVolume },
+                { label: "Total Volume", value: formatUsd(totalVolume) },
                 {
                   label: "Active Traders",
-                  value: PLATFORM_STATS.activeTraders.toLocaleString(),
+                  value: verifiedTraders.length.toLocaleString(),
                 },
                 {
                   label: "Avg ROI",
-                  value: PLATFORM_STATS.avgRoi,
-                  accent: "text-success",
+                  value: `${averageRoi >= 0 ? "+" : ""}${averageRoi.toFixed(2)}%`,
+                  accent: averageRoi >= 0 ? "text-success" : "text-danger",
                 },
-                { label: "TVL", value: PLATFORM_STATS.tvl },
+                { label: "Trader Balance", value: formatUsd(totalValue) },
               ].map((s) => (
                 <div key={s.label} className="bg-background p-4">
                   <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">
@@ -130,25 +145,18 @@ export default function LandingPage() {
           {/* Right column — Top Trader Spotlight */}
           <div className="lg:col-span-4 lg:pl-8 lg:border-l border-border flex flex-col gap-4">
             <div className="text-[10px] uppercase tracking-[0.2em] font-mono text-muted-foreground">
-              ▎ Leader · 30D
+              ▎ Verified master leader
             </div>
-            <Link
-              href={`/traders/${topTraders[0].address}`}
-              className="block bg-surface border border-border p-5 hover:border-accent transition-colors"
-            >
+            {leader ? (
+              <Link
+                href={`/traders/${leader.traderWalletAddress}`}
+                className="block bg-surface border border-border p-5 hover:border-accent transition-colors"
+              >
               <div className="flex items-center gap-3 mb-4">
-                <div className="relative w-14 h-14 overflow-hidden border border-border">
-                  <Image
-                    src={topTraders[0].avatar}
-                    alt=""
-                    fill
-                    sizes="56px"
-                    className="object-cover"
-                  />
-                </div>
+                <WalletAvatar address={leader.traderWalletAddress} size={56} className="overflow-hidden border border-border" />
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <span className="font-medium">{topTraders[0].ens}</span>
+                    <span className="font-medium">{leader.displayName}</span>
                     <Shield
                       className="w-4 h-4 text-accent"
                       fill="#00E5FF"
@@ -156,18 +164,18 @@ export default function LandingPage() {
                     />
                   </div>
                   <div className="font-mono text-xs text-muted-foreground">
-                    {topTraders[0].address.slice(0, 6)}…
-                    {topTraders[0].address.slice(-4)}
+                    {leader.traderWalletAddress.slice(0, 6)}…
+                    {leader.traderWalletAddress.slice(-4)}
                   </div>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-end">
                   <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                    30D ROI
+                    Master ROI
                   </span>
-                  <span className="font-mono text-4xl text-success font-medium">
-                    +{topTraders[0].roi30d.toFixed(1)}%
+                  <span className={`font-mono text-4xl font-medium ${leader.roi >= 0 ? "text-success" : "text-danger"}`}>
+                    {leader.roi >= 0 ? "+" : ""}{leader.roi.toFixed(2)}%
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-3 pt-3 border-t border-border">
@@ -175,14 +183,14 @@ export default function LandingPage() {
                     <div className="text-[10px] uppercase font-mono text-muted-foreground">
                       Win Rate
                     </div>
-                    <div className="font-mono">{topTraders[0].winRate}%</div>
+                    <div className="font-mono">{leader.winRate.toFixed(1)}%</div>
                   </div>
                   <div>
                     <div className="text-[10px] uppercase font-mono text-muted-foreground">
-                      AUM
+                      Volume
                     </div>
                     <div className="font-mono">
-                      ${(topTraders[0].aum / 1e6).toFixed(1)}M
+                      {formatUsd(leader.tradingVolume)}
                     </div>
                   </div>
                   <div>
@@ -190,17 +198,22 @@ export default function LandingPage() {
                       Followers
                     </div>
                     <div className="font-mono">
-                      {topTraders[0].followers.toLocaleString()}
+                      {leader.followers.toLocaleString()}
                     </div>
                   </div>
                 </div>
               </div>
-            </Link>
+              </Link>
+            ) : (
+              <div className="flex min-h-52 items-center justify-center border border-border bg-surface p-5 text-sm text-muted-foreground">
+                {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading leader</> : "No verified master traders yet."}
+              </div>
+            )}
             <Link
               href="/explore"
               className="inline-flex items-center justify-between border border-border p-4 hover:border-border-focus group"
             >
-              <span className="text-sm">See all 1,204 verified traders</span>
+              <span className="text-sm">See all {verifiedTraders.length.toLocaleString()} verified traders</span>
               <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
@@ -279,7 +292,7 @@ export default function LandingPage() {
           <div className="flex items-end justify-between mb-12">
             <div>
               <div className="text-[10px] uppercase tracking-[0.2em] font-mono text-muted-foreground mb-3">
-                ▎ Top performers · 30D
+                ▎ Top verified performers
               </div>
               <h2
                 className="font-heading text-3xl lg:text-5xl font-bold tracking-tighter"
@@ -297,11 +310,21 @@ export default function LandingPage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {topTraders.map((t) => (
-              <TraderCard key={t.id} trader={t} />
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 border border-border bg-surface py-20 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading verified master traders
+            </div>
+          ) : topTraders.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {topTraders.map((trader) => (
+                <VerifiedMasterCard key={trader.traderId} trader={trader} />
+              ))}
+            </div>
+          ) : (
+            <div className="border border-dashed border-border py-20 text-center text-muted-foreground">
+              No verified master traders yet.
+            </div>
+          )}
         </div>
       </section>
 
@@ -313,7 +336,7 @@ export default function LandingPage() {
               className="font-heading text-sm font-bold tracking-tighter"
               style={{ fontFamily: "var(--font-unbounded)" }}
             >
-              ALPHAVAULT
+              KOPITRADE
             </div>
             <div className="text-xs text-muted-foreground mt-1 font-mono">
               © 2026 · Non-custodial copy trading

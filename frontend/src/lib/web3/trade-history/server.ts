@@ -143,6 +143,8 @@ export type StoredTradeHistoryRecord = {
 export type OnChainTradeMetrics = {
   totalTrades: number;
   roi: number;
+  winRate: number;
+  roiHistory: number[];
   tradingVolume: number;
 };
 
@@ -287,10 +289,22 @@ export async function getOnChainTradeMetrics(
       ? 0
       : metricRecords.reduce((total, record) => total + Number(formatUnits(record.roi, record.roiDecimals)), 0) /
         totalTrades;
+  const winRate = totalTrades === 0
+    ? 0
+    : (metricRecords.filter((record) => record.pnl > 0n).length / totalTrades) * 100;
+  let cumulativeRoi = 0;
+  const roiHistory = [...metricRecords]
+    .sort((a, b) => Number(a.closedTime - b.closedTime))
+    .map((record) => {
+      cumulativeRoi += Number(formatUnits(record.roi, record.roiDecimals));
+      return cumulativeRoi;
+    });
 
   return {
     totalTrades,
     roi,
+    winRate,
+    roiHistory,
     tradingVolume,
   };
 }
