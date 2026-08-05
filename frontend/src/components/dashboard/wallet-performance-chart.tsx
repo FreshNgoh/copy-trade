@@ -153,7 +153,7 @@ export function WalletPerformanceChart({ dashboard }: { dashboard: TraderDashboa
             <CartesianGrid stroke="#27272a" strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="time" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(value) => new Intl.DateTimeFormat(undefined, range === "1D" ? { hour: "numeric" } : { month: "short", day: "numeric" }).format(new Date(value))} stroke="#71717a" tickLine={false} axisLine={false} fontSize={10} minTickGap={40} />
             <YAxis tickFormatter={(value) => `$${Number(value).toFixed(2)}`} stroke="#71717a" tickLine={false} axisLine={false} fontSize={10} width={68} domain={["auto", "auto"]} />
-            <Tooltip contentStyle={{ background: "#0f0f11", border: "1px solid #27272a", borderRadius: 0, fontFamily: "monospace", fontSize: 12 }} labelFormatter={(value) => new Date(Number(value)).toLocaleString()} formatter={(value) => [`$${Number(value).toFixed(2)}`, `${wallet === "manual" ? "Manual" : "Copy"} wallet`]} />
+            <Tooltip contentStyle={{ background: "#0f0f11", border: "1px solid #3f3f46", borderRadius: 0, color: "#f4f4f5", fontFamily: "monospace", fontSize: 12 }} itemStyle={{ color: "#f4f4f5" }} labelStyle={{ color: "#a1a1aa" }} labelFormatter={(value) => new Date(Number(value)).toLocaleString()} formatter={(value) => [`$${Number(value).toFixed(2)}`, `${wallet === "manual" ? "Manual" : "Copy"} wallet`]} />
             <Area type="monotone" dataKey="value" stroke="#00E5FF" strokeWidth={2} fill="url(#walletFill)" dot={false} activeDot={{ r: 4, fill: "#00E5FF", stroke: "#050505" }} />
           </AreaChart>
         </ResponsiveContainer>

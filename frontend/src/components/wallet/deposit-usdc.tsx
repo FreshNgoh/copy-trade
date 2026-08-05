@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   CircleDollarSign,
   Coins,
+  Loader2,
   Network,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
   const { address, isConnected, chain } = useAccount();
   const [amount, setAmount] = React.useState("");
   const [step, setStep] = React.useState<"method" | "amount">("method");
+  const [isDepositing, setIsDepositing] = React.useState(false);
 
   const { writeContractAsync, isPending } = useWriteContract();
   const amountNumber = Number(amount);
@@ -74,6 +76,7 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
     }
 
     try {
+      setIsDepositing(true);
       toast.info("Depositing Sepolia ETH...");
 
       const depositHash = await writeContractAsync({
@@ -108,6 +111,8 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
       await refetchAvailableBalance();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Deposit failed");
+    } finally {
+      setIsDepositing(false);
     }
   };
 
@@ -241,13 +246,20 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
       <div className="mt-auto pt-10">
         <Button
           onClick={handleDeposit}
-          disabled={isPending}
+          disabled={isDepositing}
           className={cn(
             "h-12 w-full font-mono uppercase tracking-wider",
             "bg-white text-black hover:bg-neutral-200",
           )}
         >
-          {isPending ? "Processing..." : "Process Deposit"}
+          {isDepositing ? (
+            <span className="inline-flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {isPending ? "Confirm in wallet" : "Confirming deposit"}
+            </span>
+          ) : (
+            "Process Deposit"
+          )}
         </Button>
 
         <div className="mt-7 border-t border-border pt-6 space-y-3 text-sm">

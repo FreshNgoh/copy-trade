@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMasterFollowers } from "@/services/master-followers-service";
 
 export const dynamic = "force-dynamic";
+import { getMasterFollowers } from "@/services/master-followers-service";
 
 export async function GET(req: NextRequest) {
   const masterWalletAddress = new URL(req.url).searchParams

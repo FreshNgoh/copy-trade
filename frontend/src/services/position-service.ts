@@ -315,10 +315,57 @@ export async function closePosition(position: ClosePositionDTO) {
 
   await settleClosedPositionRewards(closedPosition);
   await releaseCopiedMargin(closedPosition);
+  await closeCopiedFollowerPositions(closedPosition);
   await syncOpenPositionCount(position.trader_wallet_address);
   await syncClosedPositionToChain(closedPosition);
 
   return closedPosition;
+}
+
+async function closeCopiedFollowerPositions(masterPosition) {
+  if (masterPosition.trade_source !== "MASTER_COPY") return;
+
+  const copiedPositions =
+    await positionRepository.getOpenCopiedPositionsForMasterTrade({
+      masterWalletAddress: masterPosition.trader_wallet_address,
+      symbol: masterPosition.symbol,
+      direction: masterPosition.direction,
+    });
+  const closingPrice = toNumber(masterPosition.closing_price);
+
+  for (const copiedPosition of copiedPositions) {
+    const entryPrice = toNumber(copiedPosition.entry_price);
+    const quantity = toNumber(copiedPosition.quantity);
+    const leverage = toNumber(copiedPosition.leverage);
+
+    if (
+      closingPrice <= 0 ||
+      entryPrice <= 0 ||
+      quantity <= 0 ||
+      leverage <= 0
+    ) {
+      throw new Error(
+        `Cannot close copied position ${copiedPosition.position_id}: invalid trade metrics`,
+      );
+    }
+
+    const pnl =
+      copiedPosition.direction === "LONG"
+        ? (closingPrice - entryPrice) * quantity
+        : (entryPrice - closingPrice) * quantity;
+    const roi =
+      (pnl / (entryPrice * quantity)) * leverage * 100;
+
+    await closePosition({
+      position_id: copiedPosition.position_id,
+      trader_wallet_address: copiedPosition.trader_wallet_address,
+      closing_price: closingPrice,
+      updated_at: masterPosition.updated_at ?? new Date().toISOString(),
+      status: "CLOSED",
+      Pnl: pnl,
+      Roi: roi,
+    });
+  }
 }
 
 async function settleClosedPositionRewards(position) {
@@ -385,9 +432,9 @@ async function releaseCopiedMargin(position) {
   if (copyPositionIds.length === 0) return;
 
   try {
-    await Promise.all(
-      copyPositionIds.map((id) => closeCopiedTradeOnChain(String(id))),
-    );
+    for (const id of copyPositionIds) {
+      await closeCopiedTradeOnChain(String(id));
+    }
   } catch (error) {
     console.error("CopyTrading margin release failed:", {
       positionId: position.position_id,

@@ -60,7 +60,10 @@ export async function getMasterFollowers(
       ).length,
       lastCopiedAt: setting.last_copied_at ?? null,
     };
-  });
+  }).sort((a, b) =>
+    b.realizedEarnings - a.realizedEarnings ||
+    a.followedAt.localeCompare(b.followedAt),
+  );
 
   return {
     followers,

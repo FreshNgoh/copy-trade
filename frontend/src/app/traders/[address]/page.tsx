@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -38,6 +39,7 @@ import {
 import { TRADE_HISTORY_CONTRACT_ADDRESS } from "@/lib/web3/trade-history/constants";
 import { MASTER_REGISTRY_CONTRACT_ADDRESS } from "@/lib/web3/master-registry/constants";
 import { getTraderDashboardApi } from "@/lib/api/trader-dashboard-api";
+import type { TraderDashboardPosition } from "@/types/trader-dashboard";
 
 const notAvailable = "N/A";
 
@@ -48,6 +50,11 @@ export default function TraderProfilePage() {
     : params.address;
   const [copyOpen, setCopyOpen] = React.useState(false);
   const [followers, setFollowers] = React.useState<number | null>(null);
+  const [activeMasterPositions, setActiveMasterPositions] = React.useState<
+    TraderDashboardPosition[]
+  >([]);
+  const [activePositionsLoading, setActivePositionsLoading] =
+    React.useState(false);
   const {
     profile,
     isLoading,
@@ -73,26 +80,38 @@ export default function TraderProfilePage() {
 
     if (!traderAddress) {
       setFollowers(null);
+      setActiveMasterPositions([]);
       return;
     }
 
-    async function loadFollowers() {
+    async function loadDashboard() {
+      setActivePositionsLoading(true);
       try {
         const dashboard = await getTraderDashboardApi(traderAddress);
         if (!cancelled) {
           setFollowers(dashboard.stats.followers);
+          setActiveMasterPositions(
+            dashboard.activePositions.filter(
+              (position) => position.trade_source === "MASTER_COPY",
+            ),
+          );
         }
       } catch {
         if (!cancelled) {
           setFollowers(null);
+          setActiveMasterPositions([]);
         }
+      } finally {
+        if (!cancelled) setActivePositionsLoading(false);
       }
     }
 
-    loadFollowers();
+    loadDashboard();
+    const interval = window.setInterval(loadDashboard, 15_000);
 
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
     };
   }, [traderAddress]);
 
@@ -122,6 +141,7 @@ export default function TraderProfilePage() {
     {
       l: "Followers",
       v: followers === null ? notAvailable : followers.toLocaleString(),
+      href: traderAddress ? `/traders/${traderAddress}/followers` : undefined,
     },
     {
       l: "Total Trades",
@@ -283,14 +303,37 @@ export default function TraderProfilePage() {
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border mb-6">
-          {stats.map((s) => (
-            <div key={s.l} className="bg-surface p-4">
-              <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">
-                {s.l}
+          {stats.map((s) => {
+            const content = (
+              <>
+                <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground mb-1.5">
+                  {s.l}
+                </div>
+                <div className={cn("flex w-full items-center justify-between font-mono text-base", s.c)}>
+                  {s.v}
+                  {s.href && (
+                    <span className="text-sm text-accent transition-transform group-hover:translate-x-1">
+                      →
+                    </span>
+                  )}
+                </div>
+              </>
+            );
+
+            return s.href ? (
+              <Link
+                key={s.l}
+                href={s.href}
+                className="group bg-surface p-4 transition-colors hover:bg-surface-hover"
+              >
+                {content}
+              </Link>
+            ) : (
+              <div key={s.l} className="bg-surface p-4">
+                {content}
               </div>
-              <div className={cn("font-mono text-base", s.c)}>{s.v}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -347,11 +390,14 @@ export default function TraderProfilePage() {
                     <Tooltip
                       contentStyle={{
                         background: "#0F0F11",
-                        border: "1px solid #27272A",
+                        border: "1px solid #3F3F46",
                         borderRadius: 0,
+                        color: "#F4F4F5",
                         fontFamily: "JetBrains Mono",
                         fontSize: 11,
                       }}
+                      itemStyle={{ color: "#F4F4F5" }}
+                      labelStyle={{ color: "#A1A1AA" }}
                       labelFormatter={(t) =>
                         new Date(Number(t)).toLocaleDateString()
                       }
@@ -375,16 +421,66 @@ export default function TraderProfilePage() {
           </div>
 
           <div className="bg-surface border border-border">
-            <div className="px-5 py-3 border-b border-border">
+            <div className="flex items-center justify-between border-b border-border px-5 py-3">
               <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
                 Master Copy Active Positions
               </span>
+              <span className="border border-border bg-background px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                {activeMasterPositions.length} ACTIVE
+              </span>
             </div>
             <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
-              <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-                <RefreshCcw className="h-4 w-4" />
-                {notAvailable}
-              </div>
+              {activePositionsLoading && activeMasterPositions.length === 0 ? (
+                <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+                  <RefreshCcw className="h-4 w-4 animate-spin" />
+                  Loading active positions...
+                </div>
+              ) : activeMasterPositions.length > 0 ? (
+                activeMasterPositions.map((position) => (
+                  <div
+                    key={position.position_id}
+                    className="group flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-surface-hover"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="min-w-[86px] truncate font-mono text-sm font-medium text-foreground">
+                        {position.symbol}
+                      </span>
+                      <span
+                        className={cn(
+                          "min-w-[50px] shrink-0 border px-1.5 py-0.5 text-center font-mono text-[10px]",
+                          position.direction === "LONG"
+                            ? "border-success/40 bg-success/10 text-success"
+                            : "border-danger/40 bg-danger/10 text-danger",
+                        )}
+                      >
+                        {position.direction}
+                      </span>
+                      <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                        {Number(position.leverage)}×
+                      </span>
+                    </div>
+                    <div className="shrink-0 text-right font-mono">
+                      <span className="mr-2 text-[9px] uppercase tracking-wider text-muted-foreground">
+                        Entry
+                      </span>
+                      <span className="text-xs text-foreground">
+                        $
+                        {Number(position.entry_price).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          },
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-4 text-sm text-muted-foreground">
+                  No active Master Copy positions.
+                </div>
+              )}
             </div>
           </div>
         </div>

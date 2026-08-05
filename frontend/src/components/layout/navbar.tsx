@@ -20,6 +20,13 @@ const NAV = [
   { href: "/trade", label: "Trade" },
 ];
 
+function isNavItemActive(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  if (href === "/explore" && pathname.startsWith("/traders/")) return true;
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function Navbar() {
   const pathname = usePathname();
   const { address } = useAccount();
@@ -68,10 +75,7 @@ export function Navbar() {
 
           <div className="hidden lg:flex items-center gap-1">
             {NAV.map((item) => {
-              const active =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname?.startsWith(item.href);
+              const active = isNavItemActive(pathname, item.href);
               return (
                 <Link
                   key={item.href}

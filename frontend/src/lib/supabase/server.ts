@@ -16,4 +16,13 @@ export const supabase = createClient(supabaseUrl, serviceRoleKey, {
     persistSession: false,
     autoRefreshToken: false,
   },
+  global: {
+    // Next.js patches server-side fetch and may otherwise persist stale
+    // Supabase REST responses in its data cache.
+    fetch: (input, init) =>
+      fetch(input, {
+        ...init,
+        cache: "no-store",
+      }),
+  },
 });

@@ -473,6 +473,29 @@ export class PositionRepository {
     return data;
   }
 
+  async getOpenCopiedPositionsForMasterTrade({
+    masterWalletAddress,
+    symbol,
+    direction,
+  }: {
+    masterWalletAddress: string;
+    symbol: string;
+    direction: "LONG" | "SHORT";
+  }) {
+    const { data, error } = await supabase
+      .from("positions")
+      .select("*")
+      .ilike("copied_from_master", masterWalletAddress)
+      .eq("symbol", symbol)
+      .eq("direction", direction)
+      .eq("trade_source", "COPY")
+      .eq("status", "OPEN")
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+    return data ?? [];
+  }
+
   async updateCopiedPositionsTpSl({
     masterWalletAddress,
     symbol,
