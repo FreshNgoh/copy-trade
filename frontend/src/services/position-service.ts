@@ -1,5 +1,4 @@
 import { positionRepository } from "@/repositories/position-repository";
-import { keccak256, toHex } from "viem";
 import { traderDashboardRepository } from "@/repositories/trader-dashboard-repository";
 import { calculateTradeMetrics, calculateWalletLiquidationPrices } from "@/lib/trading/calculation";
 import { copyMasterPositionToFollowers } from "@/services/copy-trading-service";
@@ -17,6 +16,7 @@ import {
   toScaledInteger,
   toUnixTimestamp,
 } from "@/lib/web3/trade-history/server";
+import { buildPositionOrderHash } from "@/lib/web3/trade-history/source";
 
 function toNumber(value: unknown) {
   const numberValue = Number(value);
@@ -111,7 +111,7 @@ async function syncClosedPositionToChain(
 
     await positionRepository.saveOnChainSyncSuccess({
       positionId: position.position_id,
-      tradeId: result.tradeId,
+      tradeId: getScopedOnChainTradeId(result),
       txHash: result.txHash,
     });
   } catch (error) {
@@ -131,6 +131,15 @@ async function syncClosedPositionToChain(
       error: errorMessage,
     });
   }
+}
+
+function getScopedOnChainTradeId(result: {
+  tradeId: string;
+  contractAddress?: string;
+}) {
+  return result.contractAddress
+    ? `${result.contractAddress.toLowerCase()}:${result.tradeId}`
+    : result.tradeId;
 }
 
 function buildTradeHistoryRecords(position) {
@@ -204,10 +213,6 @@ function buildTradeHistoryRecords(position) {
       pnl: toScaledInteger(masterReward, TRADE_HISTORY_DECIMALS.pnl),
     },
   ];
-}
-
-function buildPositionOrderHash(positionId: string) {
-  return keccak256(toHex(`position:${positionId}`));
 }
 
 export async function assertSufficientFreeCollateral(data: CreatePositionDTO) {
