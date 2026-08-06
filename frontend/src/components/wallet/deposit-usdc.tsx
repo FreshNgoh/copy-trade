@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { formatEther, formatUnits, parseEther, type Abi } from "viem";
+import { formatEther, formatUnits, parseEther, parseUnits, type Abi } from "viem";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { toast } from "sonner";
@@ -23,7 +23,6 @@ import vault from "@/lib/web3/abi/vault-abi.json";
 import { addNotification } from "@/lib/notifications";
 
 const vaultAbi = vault.abi as Abi;
-const DEMO_ETH_USDC_PRICE = 3000;
 
 export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
   const { address, isConnected, chain } = useAccount();
@@ -33,10 +32,27 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
 
   const { writeContractAsync, isPending } = useWriteContract();
   const amountNumber = Number(amount);
-  const ethCost =
-    Number.isFinite(amountNumber) && amountNumber > 0
-      ? amountNumber / DEMO_ETH_USDC_PRICE
-      : 0;
+
+  const { data: oneEthInUsdc } = useReadContract({
+    address: CONTRACTS.vault,
+    abi: vaultAbi,
+    functionName: "ethToUsdc",
+    args: [parseEther("1")],
+  });
+
+  const { data: requiredEth } = useReadContract({
+    address: CONTRACTS.vault,
+    abi: vaultAbi,
+    functionName: "usdcToEth",
+    args:
+      Number.isFinite(amountNumber) && amountNumber > 0
+        ? [parseUnits(amount, 6)]
+        : undefined,
+    query: {
+      enabled: Number.isFinite(amountNumber) && amountNumber > 0,
+    },
+  });
+  const ethCost = typeof requiredEth === "bigint" ? requiredEth : 0n;
 
   const { data: vaultBalance, refetch: refetchVaultBalance } = useReadContract({
     address: CONTRACTS.vault,
@@ -86,7 +102,7 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
         args: [],
         account: address,
         chain,
-        value: parseEther(ethCost.toFixed(18)),
+        value: ethCost,
       });
 
       await waitForTransactionReceipt(wagmiConfig, { hash: depositHash });
@@ -152,7 +168,7 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
         </div>
 
         <div className="mt-auto border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground">
-          Demo rate: 1 Sepolia ETH = {DEMO_ETH_USDC_PRICE.toLocaleString()} virtual USDC.
+          Oracle rate: 1 Sepolia ETH = {formatOracleUsdc(oneEthInUsdc)} virtual USDC.
         </div>
       </div>
     );
@@ -237,7 +253,7 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
           <div className="text-xs text-muted-foreground">
             Estimated wallet debit:{" "}
             <span className="font-mono text-white">
-              {ethCost > 0 ? `${ethCost.toFixed(6)} Sepolia ETH` : "0 Sepolia ETH"}
+              {ethCost > 0n ? `${formatEther(ethCost)} Sepolia ETH` : "0 Sepolia ETH"}
             </span>
           </div>
         </div>
@@ -266,13 +282,13 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
           <div className="flex justify-between gap-4">
             <span className="text-muted-foreground">Demo Rate</span>
             <span className="font-mono text-right">
-              1 ETH = {DEMO_ETH_USDC_PRICE.toLocaleString()} USDC
+              1 ETH = {formatOracleUsdc(oneEthInUsdc)} USDC
             </span>
           </div>
           <div className="flex justify-between gap-4">
             <span className="text-muted-foreground">ETH Required</span>
             <span className="font-mono text-right">
-              {ethCost > 0 ? formatEther(parseEther(ethCost.toFixed(18))) : "0"} ETH
+              {ethCost > 0n ? formatEther(ethCost) : "0"} ETH
             </span>
           </div>
           <div className="flex justify-between gap-4">
@@ -295,4 +311,12 @@ export function DepositUSDC({ onSuccess }: { onSuccess?: () => void }) {
       </div>
     </div>
   );
+}
+
+function formatOracleUsdc(value: unknown) {
+  return typeof value === "bigint"
+    ? Number(formatUnits(value, 6)).toLocaleString(undefined, {
+        maximumFractionDigits: 2,
+      })
+    : "loading";
 }
