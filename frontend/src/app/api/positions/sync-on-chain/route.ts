@@ -1,4 +1,5 @@
 import { syncClosedPositionById } from "@/services/position-service";
+import { extractErrorMessage } from "@/lib/web3/trade-history/server";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     console.error("Sync Closed Position On-Chain Error:", error);
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
+      { error: extractErrorMessage(error) },
       { status: 500 },
     );
   }

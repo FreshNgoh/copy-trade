@@ -13,6 +13,7 @@ contract TradeHistoryTest is Test {
     address private user = address(0xCAFE);
 
     bytes32 private constant BTC_USDC = "BTC/USDC";
+    bytes32 private constant ORDER_HASH = keccak256("position:test-position-1");
     uint8 private constant DIRECTION_SHORT = 1;
 
     event TradeRecordStored(
@@ -24,7 +25,8 @@ contract TradeHistoryTest is Test {
         int256 roi,
         uint8 source,
         address master,
-        address follower
+        address follower,
+        bytes32 orderHash
     );
 
     function setUp() public {
@@ -50,6 +52,15 @@ contract TradeHistoryTest is Test {
         vm.prank(unauthorized);
         vm.expectRevert(abi.encodeWithSelector(TradeHistory.UnauthorizedWriter.selector, unauthorized));
         tradeHistory.addTradeRecord(_sampleRecord(user));
+    }
+
+    function testRejectsMissingOrderHash() public {
+        TradeHistory.TradeRecord memory record = _sampleRecord(user);
+        record.orderHash = bytes32(0);
+
+        vm.prank(backend);
+        vm.expectRevert(TradeHistory.InvalidOrderHash.selector);
+        tradeHistory.addTradeRecord(record);
     }
 
     function testUserTradeCountWorks() public {
@@ -104,6 +115,7 @@ contract TradeHistoryTest is Test {
         assertEq(record.grossPnl, 550);
         assertEq(record.masterReward, 0);
         assertEq(record.followerReward, 0);
+        assertEq(record.orderHash, ORDER_HASH);
     }
 
     function testEventEmission() public {
@@ -111,7 +123,7 @@ contract TradeHistoryTest is Test {
 
         vm.prank(backend);
         vm.expectEmit(true, true, true, true, address(tradeHistory));
-        emit TradeRecordStored(1, user, backend, BTC_USDC, 550, 8_600, 0, address(0), address(0));
+        emit TradeRecordStored(1, user, backend, BTC_USDC, 550, 8_600, 0, address(0), address(0), ORDER_HASH);
         tradeHistory.addTradeRecord(record);
     }
 
@@ -136,7 +148,8 @@ contract TradeHistoryTest is Test {
             roi: 8_600,
             grossPnl: 550,
             masterReward: 0,
-            followerReward: 0
+            followerReward: 0,
+            orderHash: ORDER_HASH
         });
     }
 }

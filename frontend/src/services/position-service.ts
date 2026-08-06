@@ -1,4 +1,5 @@
 import { positionRepository } from "@/repositories/position-repository";
+import { keccak256, toHex } from "viem";
 import { traderDashboardRepository } from "@/repositories/trader-dashboard-repository";
 import { calculateTradeMetrics, calculateWalletLiquidationPrices } from "@/lib/trading/calculation";
 import { copyMasterPositionToFollowers } from "@/services/copy-trading-service";
@@ -10,6 +11,7 @@ import type {
   UpdatePosition,
 } from "@/types/position";
 import {
+  extractErrorMessage,
   storeTradeHistoryRecord,
   stringToBytes32,
   toScaledInteger,
@@ -113,7 +115,7 @@ async function syncClosedPositionToChain(
       txHash: result.txHash,
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = extractErrorMessage(error);
 
     await positionRepository.saveOnChainSyncFailure({
       positionId: position.position_id,
@@ -155,6 +157,7 @@ function buildTradeHistoryRecords(position) {
     grossPnl: toScaledInteger(grossPnl, TRADE_HISTORY_DECIMALS.pnl),
     masterReward: toScaledInteger(masterReward, TRADE_HISTORY_DECIMALS.pnl),
     followerReward: toScaledInteger(followerReward, TRADE_HISTORY_DECIMALS.pnl),
+    orderHash: buildPositionOrderHash(position.position_id),
   };
 
   if (isMasterCopy) {
@@ -201,6 +204,10 @@ function buildTradeHistoryRecords(position) {
       pnl: toScaledInteger(masterReward, TRADE_HISTORY_DECIMALS.pnl),
     },
   ];
+}
+
+function buildPositionOrderHash(positionId: string) {
+  return keccak256(toHex(`position:${positionId}`));
 }
 
 export async function assertSufficientFreeCollateral(data: CreatePositionDTO) {

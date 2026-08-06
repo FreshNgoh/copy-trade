@@ -24,4 +24,5 @@ export type OnChainTradeRecord = {
   grossPnl: bigint;
   masterReward: bigint;
   followerReward: bigint;
+  orderHash: Hex;
 };

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { formatUnits, type Abi } from 'viem';
-import { useAccount, useReadContract } from 'wagmi';
+import { useAccount, useReadContract, useSignTypedData } from 'wagmi';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -15,6 +15,15 @@ import copyTrading from '@/lib/web3/abi/copy-trading-abi.json';
 import { WalletAvatar } from '@/components/wallet/wallet-avatar';
 import { getTraderDashboardApi } from '@/lib/api/trader-dashboard-api';
 import { pauseCopySettingsApi, saveCopySettingsApi } from '@/lib/api/copy-trading-api';
+import {
+  buildCopySettingsIntentMessage,
+  buildPauseCopyIntentMessage,
+  copySettingsIntentTypes,
+  createIntentDeadline,
+  getClientIntentChainId,
+  getIntentDomain,
+  pauseCopyIntentTypes,
+} from '@/lib/web3/eip712-intents';
 
 const copyTradingAbi = copyTrading.abi as Abi;
 
@@ -40,6 +49,7 @@ export function CopySettingsModal({
   const [maxTrades, setMaxTrades] = React.useState([10]);
   const [submitting, setSubmitting] = React.useState(false);
   const { address, isConnected } = useAccount();
+  const { signTypedDataAsync } = useSignTypedData();
 
   const copyContractReady = Boolean(CONTRACTS.copyTrading && address && trader.address);
 
@@ -132,13 +142,38 @@ export function CopySettingsModal({
         );
       }
 
+      const maxAllocationBps = allocation[0] * 100;
+      const stopLossBps = stopLoss[0] * 100;
+      const maxDailyTrades = maxTrades[0];
+      const deadline = createIntentDeadline();
+      const signature = await signTypedDataAsync({
+        account: address,
+        domain: getIntentDomain({
+          chainId: getClientIntentChainId(),
+          verifyingContract: CONTRACTS.copyTrading,
+        }),
+        types: copySettingsIntentTypes,
+        primaryType: 'CopySettingsIntent',
+        message: buildCopySettingsIntentMessage({
+          follower: address,
+          trader: trader.address,
+          maxCopyAmount: investmentAmount,
+          maxAllocationBps,
+          stopLossBps,
+          maxDailyTrades,
+          deadline,
+        }),
+      });
+
       await saveCopySettingsApi({
         masterWalletAddress: trader.address,
         followerWalletAddress: address,
         maxCopyAmount: investmentAmount,
-        maxAllocationBps: allocation[0] * 100,
-        stopLossBps: stopLoss[0] * 100,
-        maxDailyTrades: maxTrades[0],
+        maxAllocationBps,
+        stopLossBps,
+        maxDailyTrades,
+        signature,
+        deadline,
       });
 
       await Promise.all([
@@ -171,9 +206,27 @@ export function CopySettingsModal({
     try {
       setSubmitting(true);
 
+      const deadline = createIntentDeadline();
+      const signature = await signTypedDataAsync({
+        account: address,
+        domain: getIntentDomain({
+          chainId: getClientIntentChainId(),
+          verifyingContract: CONTRACTS.copyTrading,
+        }),
+        types: pauseCopyIntentTypes,
+        primaryType: 'PauseCopyIntent',
+        message: buildPauseCopyIntentMessage({
+          follower: address,
+          trader: trader.address,
+          deadline,
+        }),
+      });
+
       await pauseCopySettingsApi({
         masterWalletAddress: trader.address,
         followerWalletAddress: address,
+        signature,
+        deadline,
       });
       await refetchCopySettings();
 

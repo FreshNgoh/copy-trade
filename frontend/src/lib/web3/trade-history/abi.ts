@@ -214,6 +214,11 @@ export const tradeHistoryAbi = [
             "name": "followerReward",
             "type": "int256",
             "internalType": "int256"
+          },
+          {
+            "name": "orderHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
           }
         ]
       }
@@ -361,6 +366,11 @@ export const tradeHistoryAbi = [
             "name": "followerReward",
             "type": "int256",
             "internalType": "int256"
+          },
+          {
+            "name": "orderHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
           }
         ]
       }
@@ -684,6 +694,12 @@ export const tradeHistoryAbi = [
         "type": "address",
         "indexed": false,
         "internalType": "address"
+      },
+      {
+        "name": "orderHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
       }
     ],
     "anonymous": false
@@ -735,6 +751,11 @@ export const tradeHistoryAbi = [
         "internalType": "uint8"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidOrderHash",
+    "inputs": []
   },
   {
     "type": "error",

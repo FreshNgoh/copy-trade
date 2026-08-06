@@ -1,4 +1,4 @@
-import { getAddress } from "ethers";
+import { getAddress, id } from "ethers";
 import {
   parseDirection,
   parseScaledInteger,
@@ -99,7 +99,8 @@ export function buildTradeRecordFromClosedOrder(order: ClosedOrder): TradeRecord
     roi: parseScaledInteger(order.roi, TRADE_HISTORY_DECIMALS.roi),
     grossPnl: parseScaledInteger(order.pnl, TRADE_HISTORY_DECIMALS.pnl),
     masterReward: 0n,
-    followerReward: 0n
+    followerReward: 0n,
+    orderHash: id(`order:${order.id}`)
   };
 }
 

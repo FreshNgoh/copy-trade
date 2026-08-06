@@ -49,6 +49,10 @@ export async function getMasterEligibilityApi(
 
 export async function verifyMasterTraderApi(
   traderWalletAddress: string,
+  input: {
+    signature: string;
+    deadline: bigint;
+  },
 ): Promise<VerifyMasterResponse> {
   const response = await fetch("/api/master-trader/verify", {
     method: "POST",
@@ -57,6 +61,8 @@ export async function verifyMasterTraderApi(
     },
     body: JSON.stringify({
       trader_wallet_address: traderWalletAddress,
+      signature: input.signature,
+      deadline: input.deadline.toString(),
     }),
   });
   const data = await response.json();

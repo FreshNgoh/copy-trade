@@ -5,6 +5,8 @@ export async function saveCopySettingsApi(input: {
   maxAllocationBps: number;
   stopLossBps: number;
   maxDailyTrades: number;
+  signature: string;
+  deadline: bigint;
 }) {
   const response = await fetch("/api/copy-trading/settings", {
     method: "POST",
@@ -18,6 +20,8 @@ export async function saveCopySettingsApi(input: {
       max_allocation_bps: input.maxAllocationBps,
       stop_loss_bps: input.stopLossBps,
       max_daily_trades: input.maxDailyTrades,
+      signature: input.signature,
+      deadline: input.deadline.toString(),
     }),
   });
 
@@ -33,6 +37,8 @@ export async function saveCopySettingsApi(input: {
 export async function pauseCopySettingsApi(input: {
   masterWalletAddress: string;
   followerWalletAddress: string;
+  signature: string;
+  deadline: bigint;
 }) {
   const response = await fetch("/api/copy-trading/settings", {
     method: "PATCH",
@@ -42,6 +48,8 @@ export async function pauseCopySettingsApi(input: {
     body: JSON.stringify({
       master_wallet_address: input.masterWalletAddress,
       follower_wallet_address: input.followerWalletAddress,
+      signature: input.signature,
+      deadline: input.deadline.toString(),
     }),
   });
 

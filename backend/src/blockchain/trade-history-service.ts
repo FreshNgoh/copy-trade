@@ -22,6 +22,7 @@ export type TradeRecordInput = {
   grossPnl: bigint;
   masterReward: bigint;
   followerReward: bigint;
+  orderHash: string;
 };
 
 export type StoredTradeResult = {
