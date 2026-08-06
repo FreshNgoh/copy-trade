@@ -47,6 +47,7 @@ contract TradeHistory is AccessControl {
     /// @param grossPnl Gross copied-trade PnL before reward split. Equal to pnl for own trades.
     /// @param masterReward Master share of positive copied-trade PnL.
     /// @param followerReward Follower share of positive copied-trade PnL.
+    /// @param orderHash Hash that anchors this on-chain record to the off-chain order or position.
     struct TradeRecord {
         address user;
         address master;
@@ -68,6 +69,7 @@ contract TradeHistory is AccessControl {
         int256 grossPnl;
         int256 masterReward;
         int256 followerReward;
+        bytes32 orderHash;
     }
 
     /// @notice Emitted when an authorized backend stores a closed trade record.
@@ -86,12 +88,14 @@ contract TradeHistory is AccessControl {
         int256 roi,
         uint8 source,
         address master,
-        address follower
+        address follower,
+        bytes32 orderHash
     );
 
     error UnauthorizedWriter(address account);
     error InvalidUser();
     error InvalidSymbol();
+    error InvalidOrderHash();
     error InvalidDirection(uint8 direction);
     error InvalidSource(uint8 source);
     error InvalidCopyParticipant();
@@ -133,7 +137,8 @@ contract TradeHistory is AccessControl {
             record.roi,
             record.source,
             record.master,
-            record.follower
+            record.follower,
+            record.orderHash
         );
     }
 
@@ -178,6 +183,7 @@ contract TradeHistory is AccessControl {
     function _validateRecord(TradeRecord calldata record) private pure {
         if (record.user == address(0)) revert InvalidUser();
         if (record.symbol == bytes32(0)) revert InvalidSymbol();
+        if (record.orderHash == bytes32(0)) revert InvalidOrderHash();
         if (record.direction > DIRECTION_SHORT) revert InvalidDirection(record.direction);
         if (record.source > SOURCE_COPY_REWARD) revert InvalidSource(record.source);
         if (record.source == SOURCE_OWN && (record.master != address(0) || record.follower != address(0))) {

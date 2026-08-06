@@ -45,6 +45,7 @@ const TRADE_HISTORY_WRITE_ABI = [
           { name: "grossPnl", type: "int256" },
           { name: "masterReward", type: "int256" },
           { name: "followerReward", type: "int256" },
+          { name: "orderHash", type: "bytes32" },
         ],
       },
     ],
@@ -64,6 +65,7 @@ const TRADE_HISTORY_WRITE_ABI = [
       { name: "source", type: "uint8", indexed: false },
       { name: "master", type: "address", indexed: false },
       { name: "follower", type: "address", indexed: false },
+      { name: "orderHash", type: "bytes32", indexed: false },
     ],
   },
 ] as const;
@@ -106,6 +108,7 @@ const TRADE_HISTORY_READ_ABI = [
           { name: "grossPnl", type: "int256" },
           { name: "masterReward", type: "int256" },
           { name: "followerReward", type: "int256" },
+          { name: "orderHash", type: "bytes32" },
         ],
       },
     ],
@@ -133,6 +136,7 @@ export type TradeHistoryRecordInput = {
   grossPnl: bigint;
   masterReward: bigint;
   followerReward: bigint;
+  orderHash: string;
 };
 
 export type StoredTradeHistoryRecord = {
@@ -212,6 +216,17 @@ export async function storeTradeHistoryRecord(record: TradeHistoryRecordInput): 
   // This server-side backend writer wallet pays Sepolia gas.
   // The user's wallet is only stored in TradeRecord.user and never signs this transaction.
   const contract = new Contract(getAddress(contractAddress), TRADE_HISTORY_WRITE_ABI, signer);
+  const contractCode = await provider.getCode(getAddress(contractAddress));
+  if (contractCode === "0x") {
+    throw new Error(`No TradeHistory contract code found at ${getAddress(contractAddress)}.`);
+  }
+
+  try {
+    await contract.addTradeRecord.staticCall(record);
+  } catch (error) {
+    throw new Error(`TradeHistory addTradeRecord preflight failed: ${extractErrorMessage(error)}`);
+  }
+
   const tx = await contract.addTradeRecord(record);
   const receipt = await tx.wait(1);
 
@@ -235,6 +250,44 @@ export async function storeTradeHistoryRecord(record: TradeHistoryRecordInput): 
   }
 
   throw new Error(`TradeRecordStored event not found: ${receipt.hash}`);
+}
+
+export function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (!error || typeof error !== "object") return String(error);
+
+  const candidate = error as Record<string, unknown>;
+  const values = [
+    candidate.shortMessage,
+    candidate.reason,
+    candidate.message,
+    candidate.details,
+    getNestedErrorMessage(candidate.error),
+    getNestedErrorMessage(candidate.info),
+    getNestedErrorMessage(candidate.cause),
+  ];
+
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function getNestedErrorMessage(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+
+  const candidate = value as Record<string, unknown>;
+  for (const key of ["shortMessage", "reason", "message", "details"]) {
+    const nested = candidate[key];
+    if (typeof nested === "string" && nested.trim()) return nested;
+  }
+
+  return null;
 }
 
 export async function getOnChainTradeMetrics(
@@ -342,5 +395,6 @@ function normalizeTradeRecord(
     grossPnl: BigInt(String(record.grossPnl)),
     masterReward: BigInt(String(record.masterReward)),
     followerReward: BigInt(String(record.followerReward)),
+    orderHash: String(record.orderHash) as `0x${string}`,
   };
 }

@@ -26,7 +26,8 @@ export function useVerifyMaster(traderWalletAddress?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => verifyMasterTraderApi(traderWalletAddress as string),
+    mutationFn: (input: { signature: string; deadline: bigint }) =>
+      verifyMasterTraderApi(traderWalletAddress as string, input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: masterEligibilityQueryKey(traderWalletAddress),

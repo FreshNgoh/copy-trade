@@ -65,6 +65,7 @@ export async function readUserTradeHistoryRecords({
         grossPnl: record.grossPnl,
         masterReward: record.masterReward,
         followerReward: record.followerReward,
+        orderHash: record.orderHash,
       } satisfies OnChainTradeRecord;
     }),
   );

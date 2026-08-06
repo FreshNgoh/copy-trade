@@ -3,7 +3,7 @@
 import * as React from "react";
 import { CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { useAccount } from "wagmi";
+import { useAccount, useSignTypedData } from "wagmi";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -11,10 +11,19 @@ import {
   useVerifyMaster,
 } from "@/hooks/use-master-eligibility";
 import { MasterEligibilityModal } from "./master-eligibility-modal";
+import { MASTER_REGISTRY_CONTRACT_ADDRESS } from "@/lib/web3/master-registry/constants";
+import {
+  buildVerifyMasterIntentMessage,
+  createIntentDeadline,
+  getClientIntentChainId,
+  getIntentDomain,
+  verifyMasterIntentTypes,
+} from "@/lib/web3/eip712-intents";
 // import { VerifiedMasterBadge } from "./verified-master-badge";
 
 export function MasterEligibilityButton() {
   const { address, isConnected } = useAccount();
+  const { signTypedDataAsync } = useSignTypedData();
   const [open, setOpen] = React.useState(false);
   const eligibilityQuery = useMasterEligibility(address);
   const verifyMutation = useVerifyMaster(address);
@@ -44,7 +53,26 @@ export function MasterEligibilityButton() {
     if (!address || verifyMutation.isPending || isVerifying) return;
 
     try {
-      await verifyMutation.mutateAsync();
+      if (!MASTER_REGISTRY_CONTRACT_ADDRESS) {
+        throw new Error("Master registry contract is not configured");
+      }
+
+      const deadline = createIntentDeadline();
+      const signature = await signTypedDataAsync({
+        account: address,
+        domain: getIntentDomain({
+          chainId: getClientIntentChainId(),
+          verifyingContract: MASTER_REGISTRY_CONTRACT_ADDRESS,
+        }),
+        types: verifyMasterIntentTypes,
+        primaryType: "VerifyMasterIntent",
+        message: buildVerifyMasterIntentMessage({
+          trader: address,
+          deadline,
+        }),
+      });
+
+      await verifyMutation.mutateAsync({ signature, deadline });
       toast.success("Verification submitted", {
         description: "Master trader status will refresh after confirmation.",
       });

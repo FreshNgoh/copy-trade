@@ -3,8 +3,21 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import type { Trader } from '@/lib/mock-data';
 import { Shield, TrendingUp, TrendingDown, Users } from 'lucide-react';
+
+type Trader = {
+  address: string;
+  ens: string;
+  avatar: string;
+  verified: boolean;
+  style: string;
+  roi30d: number;
+  sparkline: number[];
+  winRate: number;
+  aum: number;
+  riskScore: number;
+  followers: number;
+};
 
 function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
   const min = Math.min(...data);

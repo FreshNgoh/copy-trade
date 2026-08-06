@@ -24,8 +24,16 @@ Closed trades are written once by an authorized backend wallet after the Web2 or
 - `pnl`: scaled `int256`, for example `+$5.50` with `pnlDecimals = 2` is `550`
 - `roi`: scaled `int256`, for example `+0.86%` with `roiDecimals = 4` is `8600`
 - `openTime`, `closedTime`: Unix timestamps
+- `orderHash`: `bytes32` audit anchor linking the on-chain record to the off-chain order/position without exposing the raw database ID
 
 The contract does not store `$`, `%`, or human-readable date strings. The frontend formats values for display.
+
+`orderHash` is deterministic:
+
+- Backend order sync uses `keccak256("order:<order_id>")`.
+- Frontend position sync uses `keccak256("position:<position_id>")`.
+
+To audit a row, hash the expected off-chain ID with the same prefix and compare it with `getTradeRecord(tradeId).orderHash` or the `TradeRecordStored` event.
 
 ## Deployment
 
