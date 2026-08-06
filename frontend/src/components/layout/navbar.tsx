@@ -1,12 +1,14 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 import { cn } from "@/lib/utils";
-import { Activity, Bell, Search } from "lucide-react";
+import { Bell } from "lucide-react";
 import * as React from "react";
+import logoIcon from "@/app/icon.png";
 import {
   getNotifications,
   NOTIFICATIONS_UPDATED_EVENT,
@@ -59,8 +61,15 @@ export function Navbar() {
             data-testid="nav-logo"
             className="flex items-center gap-2 group"
           >
-            <div className="w-7 h-7 bg-accent flex items-center justify-center">
-              <Activity className="w-4 h-4 text-black" strokeWidth={2.5} />
+            <div className="h-7 w-7 overflow-hidden border border-border bg-black">
+              <Image
+                src={logoIcon}
+                alt="KopiTrade"
+                width={28}
+                height={28}
+                className="h-full w-full object-cover"
+                priority
+              />
             </div>
             <span
               className="font-heading text-base font-bold tracking-tighter"
