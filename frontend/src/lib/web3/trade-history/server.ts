@@ -141,7 +141,9 @@ export type TradeHistoryRecordInput = {
 
 export type StoredTradeHistoryRecord = {
   tradeId: string;
-  txHash: string;
+  txHash: string | null;
+  contractAddress: string;
+  alreadyStored?: boolean;
 };
 
 export type OnChainTradeMetrics = {
@@ -220,6 +222,20 @@ export async function storeTradeHistoryRecord(record: TradeHistoryRecordInput): 
   if (contractCode === "0x") {
     throw new Error(`No TradeHistory contract code found at ${getAddress(contractAddress)}.`);
   }
+  const existingRecord = await findExistingTradeRecord({
+    provider,
+    contractAddress,
+    user: record.user,
+    orderHash: record.orderHash,
+  });
+
+  if (existingRecord) {
+    return {
+      ...existingRecord,
+      contractAddress: getAddress(contractAddress),
+      alreadyStored: true,
+    };
+  }
 
   try {
     await contract.addTradeRecord.staticCall(record);
@@ -242,6 +258,7 @@ export async function storeTradeHistoryRecord(record: TradeHistoryRecordInput): 
         return {
           tradeId: parsed.args.tradeId.toString(),
           txHash: receipt.hash,
+          contractAddress: getAddress(contractAddress),
         };
       }
     } catch {
@@ -250,6 +267,35 @@ export async function storeTradeHistoryRecord(record: TradeHistoryRecordInput): 
   }
 
   throw new Error(`TradeRecordStored event not found: ${receipt.hash}`);
+}
+
+async function findExistingTradeRecord({
+  provider,
+  contractAddress,
+  user,
+  orderHash,
+}: {
+  provider: JsonRpcProvider;
+  contractAddress: string;
+  user: string;
+  orderHash: string;
+}): Promise<Pick<StoredTradeHistoryRecord, "tradeId" | "txHash"> | null> {
+  const contract = new Contract(getAddress(contractAddress), TRADE_HISTORY_READ_ABI, provider);
+  const tradeIds: bigint[] = await contract.getUserTradeIds(getAddress(user));
+  const normalizedOrderHash = orderHash.toLowerCase();
+
+  for (const tradeId of tradeIds) {
+    const existing = await contract.getTradeRecord(tradeId);
+
+    if (String(existing.orderHash).toLowerCase() === normalizedOrderHash) {
+      return {
+        tradeId: tradeId.toString(),
+        txHash: null,
+      };
+    }
+  }
+
+  return null;
 }
 
 export function extractErrorMessage(error: unknown): string {

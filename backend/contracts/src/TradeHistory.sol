@@ -8,7 +8,8 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 /// @dev Users do not submit transactions. Only accounts with BACKEND_WRITER_ROLE may add records.
 contract TradeHistory is AccessControl {
     /// @notice Role allowed to store closed trade records.
-    bytes32 public constant BACKEND_WRITER_ROLE = keccak256("BACKEND_WRITER_ROLE");
+    bytes32 public constant BACKEND_WRITER_ROLE =
+        keccak256("BACKEND_WRITER_ROLE");
 
     /// @notice Direction value for long trades.
     uint8 public constant DIRECTION_LONG = 0;
@@ -28,12 +29,12 @@ contract TradeHistory is AccessControl {
     /// @notice Final closed trade data stored on-chain.
     /// @dev Values are scaled integers. Display symbols such as "$" and "%" are intentionally not stored.
     /// @param user Wallet address that owns this trade history record.
-    /// @param master Master wallet for copied trades or copy rewards. Zero address for own trades.
-    /// @param follower Follower wallet for copied trades or copy rewards. Zero address for own trades.
+    /// @param master Master wallet for copied trades or master copy. Zero address for own trades.
+    /// @param follower Follower wallet for copied trades or master copy. Zero address for own trades.
     /// @param openTime Unix timestamp when the trade was opened.
     /// @param closedTime Unix timestamp when the trade was fully closed.
     /// @param direction 0 = long, 1 = short.
-    /// @param source 0 = own trade, 1 = copied trade, 2 = copy reward.
+    /// @param source 0 = own trade, 1 = copied trade, 2 = master copy.
     /// @param quantityDecimals Decimal places used by quantity.
     /// @param priceDecimals Decimal places used by entryPrice and closingPrice.
     /// @param pnlDecimals Decimal places used by pnl.
@@ -111,7 +112,8 @@ contract TradeHistory is AccessControl {
     /// @param admin Account that can grant and revoke roles.
     /// @param backendWriter Initial backend/company wallet allowed to store records.
     constructor(address admin, address backendWriter) {
-        if (admin == address(0) || backendWriter == address(0)) revert InvalidUser();
+        if (admin == address(0) || backendWriter == address(0))
+            revert InvalidUser();
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(BACKEND_WRITER_ROLE, backendWriter);
@@ -120,8 +122,11 @@ contract TradeHistory is AccessControl {
     /// @notice Stores a final closed trade record.
     /// @dev Callable only by BACKEND_WRITER_ROLE. Returns the newly assigned trade ID.
     /// @param record Final trade data using scaled integers and Unix timestamps.
-    function addTradeRecord(TradeRecord calldata record) external returns (uint256 tradeId) {
-        if (!hasRole(BACKEND_WRITER_ROLE, msg.sender)) revert UnauthorizedWriter(msg.sender);
+    function addTradeRecord(
+        TradeRecord calldata record
+    ) external returns (uint256 tradeId) {
+        if (!hasRole(BACKEND_WRITER_ROLE, msg.sender))
+            revert UnauthorizedWriter(msg.sender);
         _validateRecord(record);
 
         tradeId = _nextTradeId++;
@@ -144,7 +149,9 @@ contract TradeHistory is AccessControl {
 
     /// @notice Returns a trade record by ID.
     /// @param tradeId Trade identifier emitted by TradeRecordStored or returned from user trade ID queries.
-    function getTradeRecord(uint256 tradeId) external view returns (TradeRecord memory record) {
+    function getTradeRecord(
+        uint256 tradeId
+    ) external view returns (TradeRecord memory record) {
         record = _tradeRecords[tradeId];
         if (record.user == address(0)) revert TradeNotFound(tradeId);
     }
@@ -152,7 +159,9 @@ contract TradeHistory is AccessControl {
     /// @notice Returns all trade IDs belonging to a user.
     /// @dev Intended for frontend reads. For very large histories, use getUserTradeIdAt with getUserTradeCount.
     /// @param user Wallet address whose trade IDs should be returned.
-    function getUserTradeIds(address user) external view returns (uint256[] memory) {
+    function getUserTradeIds(
+        address user
+    ) external view returns (uint256[] memory) {
         return _userTradeIds[user];
     }
 
@@ -166,7 +175,10 @@ contract TradeHistory is AccessControl {
     /// @dev Useful for paginated frontend reads when a user has many records.
     /// @param user Wallet address that owns the trade.
     /// @param index Zero-based index in the user's trade ID list.
-    function getUserTradeIdAt(address user, uint256 index) external view returns (uint256) {
+    function getUserTradeIdAt(
+        address user,
+        uint256 index
+    ) external view returns (uint256) {
         return _userTradeIds[user][index];
     }
 
@@ -184,15 +196,27 @@ contract TradeHistory is AccessControl {
         if (record.user == address(0)) revert InvalidUser();
         if (record.symbol == bytes32(0)) revert InvalidSymbol();
         if (record.orderHash == bytes32(0)) revert InvalidOrderHash();
-        if (record.direction > DIRECTION_SHORT) revert InvalidDirection(record.direction);
-        if (record.source > SOURCE_COPY_REWARD) revert InvalidSource(record.source);
-        if (record.source == SOURCE_OWN && (record.master != address(0) || record.follower != address(0))) {
+        if (record.direction > DIRECTION_SHORT)
+            revert InvalidDirection(record.direction);
+        if (record.source > SOURCE_COPY_REWARD)
+            revert InvalidSource(record.source);
+        if (
+            record.source == SOURCE_OWN &&
+            (record.master != address(0) || record.follower != address(0))
+        ) {
             revert InvalidCopyParticipant();
         }
-        if (record.source != SOURCE_OWN && (record.master == address(0) || record.follower == address(0))) {
+        if (
+            record.source != SOURCE_OWN &&
+            (record.master == address(0) || record.follower == address(0))
+        ) {
             revert InvalidCopyParticipant();
         }
-        if (record.openTime == 0 || record.closedTime == 0 || record.closedTime < record.openTime) {
+        if (
+            record.openTime == 0 ||
+            record.closedTime == 0 ||
+            record.closedTime < record.openTime
+        ) {
             revert InvalidTimestamp();
         }
     }

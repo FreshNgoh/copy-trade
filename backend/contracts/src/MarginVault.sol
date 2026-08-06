@@ -5,14 +5,24 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+interface AggregatorV3Interface {
+    function decimals() external view returns (uint8);
+    function latestRoundData()
+        external
+        view
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
+}
+
 contract MarginVault is AccessControl {
     using SafeERC20 for IERC20;
 
     bytes32 public constant MARGIN_MANAGER_ROLE = keccak256("MARGIN_MANAGER_ROLE");
-    uint256 public constant ETH_USDC_PRICE = 3_000e6;
     uint256 public constant USDC_DECIMALS = 1e6;
+    uint256 public constant MAX_PRICE_STALENESS = 1 days;
 
     IERC20 public immutable usdc;
+    AggregatorV3Interface public immutable ethUsdPriceFeed;
+    uint8 public immutable ethUsdPriceFeedDecimals;
 
     mapping(address => uint256) public balances;
     mapping(address => uint256) public usedMargin;
@@ -25,11 +35,15 @@ contract MarginVault is AccessControl {
     event MarginReleased(address indexed user, uint256 amount);
 
     error InvalidAddress();
+    error InvalidOraclePrice();
+    error StaleOraclePrice(uint256 updatedAt);
 
-    constructor(address _usdc, address admin) {
-        if (_usdc == address(0) || admin == address(0)) revert InvalidAddress();
+    constructor(address _usdc, address admin, address _ethUsdPriceFeed) {
+        if (_usdc == address(0) || admin == address(0) || _ethUsdPriceFeed == address(0)) revert InvalidAddress();
 
         usdc = IERC20(_usdc);
+        ethUsdPriceFeed = AggregatorV3Interface(_ethUsdPriceFeed);
+        ethUsdPriceFeedDecimals = ethUsdPriceFeed.decimals();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
 
@@ -102,11 +116,30 @@ contract MarginVault is AccessControl {
         emit MarginReleased(user, amount);
     }
 
-    function ethToUsdc(uint256 ethAmount) public pure returns (uint256) {
-        return (ethAmount * ETH_USDC_PRICE) / 1 ether;
+    function ethToUsdc(uint256 ethAmount) public view returns (uint256) {
+        return (ethAmount * latestEthUsdPrice()) / 1 ether;
     }
 
-    function usdcToEth(uint256 usdcAmount) public pure returns (uint256) {
-        return (usdcAmount * 1 ether) / ETH_USDC_PRICE;
+    function usdcToEth(uint256 usdcAmount) public view returns (uint256) {
+        return (usdcAmount * 1 ether) / latestEthUsdPrice();
+    }
+
+    function latestEthUsdPrice() public view returns (uint256) {
+        (uint80 roundId, int256 answer,, uint256 updatedAt, uint80 answeredInRound) =
+            ethUsdPriceFeed.latestRoundData();
+
+        if (answer <= 0 || answeredInRound < roundId) revert InvalidOraclePrice();
+        if (updatedAt == 0 || updatedAt > block.timestamp || block.timestamp - updatedAt > MAX_PRICE_STALENESS) {
+            revert StaleOraclePrice(updatedAt);
+        }
+
+        return _scalePriceToUsdcDecimals(uint256(answer));
+    }
+
+    function _scalePriceToUsdcDecimals(uint256 price) private view returns (uint256) {
+        if (ethUsdPriceFeedDecimals == 6) return price;
+        if (ethUsdPriceFeedDecimals > 6) return price / (10 ** (ethUsdPriceFeedDecimals - 6));
+
+        return price * (10 ** (6 - ethUsdPriceFeedDecimals));
     }
 }

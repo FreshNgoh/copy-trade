@@ -7,8 +7,21 @@ import {CopyTrading} from "../src/CopyTrading.sol";
 import {MarginVault} from "../src/MarginVault.sol";
 import {MockUSDC} from "../src/MockUSDC.sol";
 
+contract CopyTradingMockEthUsdPriceFeed {
+    uint8 public constant decimals = 8;
+
+    function latestRoundData()
+        external
+        view
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
+    {
+        return (1, 3_000e8, 0, block.timestamp, 1);
+    }
+}
+
 contract CopyTradingTest is Test {
     MockUSDC private usdc;
+    CopyTradingMockEthUsdPriceFeed private priceFeed;
     MarginVault private vault;
     CopyTrading private copyTrading;
 
@@ -25,7 +38,8 @@ contract CopyTradingTest is Test {
 
     function setUp() public {
         usdc = new MockUSDC();
-        vault = new MarginVault(address(usdc), admin);
+        priceFeed = new CopyTradingMockEthUsdPriceFeed();
+        vault = new MarginVault(address(usdc), admin, address(priceFeed));
         copyTrading = new CopyTrading(admin, executor, address(vault));
 
         bytes32 marginManagerRole = vault.MARGIN_MANAGER_ROLE();
@@ -73,12 +87,12 @@ contract CopyTradingTest is Test {
     }
 
     function testUnauthorizedCannotStoreCopySettingsForFollower() public {
-        vm.prank(unauthorized);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IAccessControl.AccessControlUnauthorizedAccount.selector, unauthorized, copyTrading.EXECUTOR_ROLE()
             )
         );
+        vm.prank(unauthorized);
         copyTrading.setCopySettingsFor(follower, trader, 250e6, 1_500, 1_000, 5, true);
     }
 

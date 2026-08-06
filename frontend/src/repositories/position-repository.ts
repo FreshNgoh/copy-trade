@@ -209,7 +209,7 @@ export class PositionRepository {
   }: {
     positionId: string;
     tradeId: string;
-    txHash: string;
+    txHash: string | null;
   }) {
     const { error } = await supabase
       .from("positions")
