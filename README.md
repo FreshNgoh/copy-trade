@@ -58,7 +58,7 @@ KopiTrade improves transparency by moving key trust boundaries on-chain:
 
 ### Frontend
 
-- Wallet connection with RainbowKit, Wagmi, Viem, and MetaMask-style wallet avatars.
+- Wallet connection with RainbowKit, Wagmi and Viem.
 - Trading terminal at `/trade` with:
   - Pair selection.
   - Market and limit order UI.
@@ -896,10 +896,3 @@ forge test --match-contract MasterTraderRegistryTest
 - Supabase uses a service-role key in server-side code. Never expose it to browser code.
 - Demo `MockUSDC` is not production USDC.
 - Chainlink price feed checks reject stale, future-dated, or invalid oracle answers, but production systems should also consider circuit breakers, pausable operations, and broader oracle risk controls.
-
-## Current Limitations
-
-- The trading engine is application-level and demo-oriented; it is not connected to a real derivatives venue.
-- `MockUSDC` is intended for local/Sepolia testing only.
-- On-chain event reads depend on RPC limits. Deployment block variables should be set accurately.
-- Historical Supabase rows may need migration after contract redeployments.
