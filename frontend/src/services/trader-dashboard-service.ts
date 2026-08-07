@@ -178,13 +178,11 @@ export async function getTraderDashboard(
     0,
   );
   const totalWalletBalance = walletBalance + copyWalletBalance;
-  const masterCopyLiquidationCollateral = Math.max(
-    copyWalletBalance - activeCopyAllocation,
-    0,
-  );
   const activePositionsWithLiquidation = calculateWalletLiquidationPrices(
     activePositions,
-    { manual: walletBalance, copy: masterCopyLiquidationCollateral },
+    // An allocation cap reserves buying power, but the funds remain in the
+    // Copy Wallet and still collateralize its cross-margin positions.
+    { manual: walletBalance, copy: copyWalletBalance },
   );
 
   return {

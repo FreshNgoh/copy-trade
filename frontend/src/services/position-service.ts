@@ -305,20 +305,14 @@ async function syncCopiedFollowers(data: CreatePositionDTO) {
 }
 
 export async function getOpenPositions(traderWalletAddress: string) {
-  const [positions, portfolio, activeCopyAllocation] = await Promise.all([
+  const [positions, portfolio] = await Promise.all([
     positionRepository.getOpenPositions(traderWalletAddress),
     traderDashboardRepository.ensurePortfolio(traderWalletAddress),
-    copyTradingRepository.getActiveCopyAllocation({
-      followerWalletAddress: traderWalletAddress,
-    }),
   ]);
 
   return calculateWalletLiquidationPrices(positions, {
     manual: toNumber(portfolio.wallet_balance),
-    copy: Math.max(
-      toNumber(portfolio.copy_wallet_balance) - activeCopyAllocation,
-      0,
-    ),
+    copy: toNumber(portfolio.copy_wallet_balance),
   });
 }
 

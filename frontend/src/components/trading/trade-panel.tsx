@@ -42,7 +42,6 @@ export function TradePanel({
   const [freeCollateral, setFreeCollateral] = React.useState(0);
   const [manualWalletBalance, setManualWalletBalance] = React.useState(0);
   const [copyWalletBalance, setCopyWalletBalance] = React.useState(0);
-  const [copyActiveAllocation, setCopyActiveAllocation] = React.useState(0);
   const [manualFreeCollateral, setManualFreeCollateral] = React.useState(0);
   const [copyFreeCollateral, setCopyFreeCollateral] = React.useState(0);
   const [openPositions, setOpenPositions] = React.useState<TraderDashboardPosition[]>([]);
@@ -89,9 +88,9 @@ export function TradePanel({
       : [...selectedPositions, { position_id: previewId, trader_wallet_address: address ?? "", symbol: pair, quantity: orderQuantity, direction: positionDirection, entry_price: orderPrice, leverage: leverage[0], stop_loss: null, take_profit: null, status: "OPEN" as const, created_at: "", updated_at: "", trade_source: tradeMode === "COPY" ? "MASTER_COPY" as const : "OWN" as const }];
     return calculateWalletLiquidationPrices(previewPositions, {
       manual: manualWalletBalance,
-      copy: Math.max(copyWalletBalance - copyActiveAllocation, 0),
+      copy: copyWalletBalance,
     }).find((position) => position.position_id === previewId)?.liquidation_price ?? 0;
-  }, [address, copyActiveAllocation, copyWalletBalance, direction, leverage, manualWalletBalance, openPositions, orderPrice, orderQuantity, pair, tradeMode]);
+  }, [address, copyWalletBalance, direction, leverage, manualWalletBalance, openPositions, orderPrice, orderQuantity, pair, tradeMode]);
   const isOverFreeCollateral =
     marginAmount > 0 && marginAmount > freeCollateral;
   const canSubmit =
@@ -147,14 +146,12 @@ export function TradePanel({
       setFreeCollateral(tradeMode === "COPY" ? nextCopyFree : nextManualFree);
       setManualWalletBalance(Number(dashboard.stats.walletBalance || 0));
       setCopyWalletBalance(Number(dashboard.stats.copyWalletBalance || 0));
-      setCopyActiveAllocation(Number(dashboard.stats.copyActiveAllocation || 0));
       setOpenPositions(dashboard.activePositions);
     } catch (error) {
       console.error("Failed to fetch free collateral:", error);
       setFreeCollateral(0);
       setManualWalletBalance(0);
       setCopyWalletBalance(0);
-      setCopyActiveAllocation(0);
       setOpenPositions([]);
     }
   }, [address, tradeMode]);
