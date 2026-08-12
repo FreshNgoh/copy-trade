@@ -16,6 +16,8 @@ export interface TraderDashboardPortfolio {
   followers: number;
   is_verified_master?: boolean;
   master_verified_at?: string | null;
+  master_verification_block?: number | string | null;
+  master_verification_tx_hash?: string | null;
 }
 
 export interface TraderDashboardStats {

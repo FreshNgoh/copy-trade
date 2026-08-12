@@ -52,6 +52,9 @@ export default function TraderProfilePage() {
     : params.address;
   const [copyOpen, setCopyOpen] = React.useState(false);
   const [followers, setFollowers] = React.useState<number | null>(null);
+  const [verificationBlock, setVerificationBlock] = React.useState<
+    number | null
+  >(null);
   const [activeMasterPositions, setActiveMasterPositions] = React.useState<
     TraderDashboardPosition[]
   >([]);
@@ -94,6 +97,7 @@ export default function TraderProfilePage() {
 
     if (!traderAddress) {
       setFollowers(null);
+      setVerificationBlock(null);
       setActiveMasterPositions([]);
       return;
     }
@@ -104,6 +108,11 @@ export default function TraderProfilePage() {
         const dashboard = await getTraderDashboardApi(traderAddress);
         if (!cancelled) {
           setFollowers(dashboard.stats.followers);
+          setVerificationBlock(
+            dashboard.portfolio?.master_verification_block
+              ? Number(dashboard.portfolio.master_verification_block)
+              : null,
+          );
           setActiveMasterPositions(
             dashboard.activePositions.filter(
               (position) => position.trade_source === "MASTER_COPY",
@@ -113,6 +122,7 @@ export default function TraderProfilePage() {
       } catch {
         if (!cancelled) {
           setFollowers(null);
+          setVerificationBlock(null);
           setActiveMasterPositions([]);
         }
       } finally {
@@ -143,6 +153,9 @@ export default function TraderProfilePage() {
   const masterRegistryContractUrl = MASTER_REGISTRY_CONTRACT_ADDRESS
     ? `https://sepolia.etherscan.io/address/${MASTER_REGISTRY_CONTRACT_ADDRESS}#readContract`
     : null;
+  const verificationBlockLabel = verificationBlock
+    ? verificationBlock.toLocaleString()
+    : notAvailable;
 
   const stats = [
     {
@@ -239,8 +252,19 @@ export default function TraderProfilePage() {
                 </button>
                 <p className="text-sm text-muted-foreground mt-3 max-w-2xl leading-relaxed">
                   On-chain verified master trader profile from TradeHistory and
-                  MasterTraderRegistry. Fields not stored in the smart contracts
-                  are shown as {notAvailable}.
+                  MasterTraderRegistry. User verified block ID:{" "}
+                  {verificationBlock ? (
+                    <a
+                      href={`https://sepolia.etherscan.io/block/${verificationBlock}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-accent hover:underline"
+                    >
+                      {verificationBlockLabel}
+                    </a>
+                  ) : (
+                    <span className="font-mono">{verificationBlockLabel}</span>
+                  )}
                 </p>
                 <div className="flex flex-wrap gap-3 mt-3">
                   {traderAddress ? (
