@@ -38,6 +38,9 @@ export function PositionsTable({
 }) {
   const [openTPSL, setOpenTPSL] = React.useState(false);
   const [selectedPosition, setSelectedPosition] = React.useState(null);
+  const [closingPositionIds, setClosingPositionIds] = React.useState(
+    () => new Set<string>(),
+  );
 
   return activePositions.length === 0 ? (
     <EmptyState text="No open positions" />
@@ -62,6 +65,7 @@ export function PositionsTable({
           {activePositions.map((p) => {
             const markPrice = Number(markPrices[p.symbol] || 0);
             const hasMarkPrice = Number.isFinite(markPrice) && markPrice > 0;
+            const isClosing = closingPositionIds.has(p.position_id);
 
             const pnl = hasMarkPrice
               ? p.direction === "LONG"
@@ -74,10 +78,18 @@ export function PositionsTable({
               : 0;
 
             const handleClosePosition = async () => {
+              if (isClosing) return;
+
               if (!hasMarkPrice) {
                 toast.error(`Market price for ${p.symbol} is unavailable`);
                 return;
               }
+
+              setClosingPositionIds((prev) => {
+                const next = new Set(prev);
+                next.add(p.position_id);
+                return next;
+              });
 
               try {
                 await closePositionApi({
@@ -90,22 +102,30 @@ export function PositionsTable({
                   Roi: roi,
                 });
 
-                // refresh positions
                 setActivePositions((prev) =>
                   prev.filter(
                     (position) => position.position_id !== p.position_id,
                   ),
                 );
 
-                await onTradeHistoryRefresh?.();
+                window.setTimeout(() => {
+                  void onTradeHistoryRefresh?.();
+                }, 1500);
 
-                toast.success("Position closed successfully");
+                toast.success("Position closed", {
+                  description: "On-chain history is syncing in the background.",
+                });
               } catch (error) {
                 toast.error(
                   error instanceof Error
                     ? error.message
                     : "Failed to close position",
                 );
+                setClosingPositionIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(p.position_id);
+                  return next;
+                });
               }
             };
 
@@ -164,7 +184,7 @@ export function PositionsTable({
                 </td>
                 <td className="px-4 py-2.5 text-right">
                   <button
-                    disabled={!hasMarkPrice}
+                    disabled={!hasMarkPrice || isClosing}
                     title={
                       hasMarkPrice
                         ? undefined
@@ -176,22 +196,28 @@ export function PositionsTable({
                       setOpenTPSL(true);
                     }}
                   >
-                    TP/SL
+                    {isClosing ? "Closing" : "TP/SL"}
                   </button>
                 </td>
                 <td className="px-4 py-2.5 text-right">
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <button
-                        disabled={!hasMarkPrice}
+                        disabled={!hasMarkPrice || isClosing}
                         title={
                           hasMarkPrice
                             ? undefined
                             : `Market price for ${p.symbol} is unavailable`
                         }
-                        className="text-[10px] uppercase font-mono border border-border px-2 py-1 hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
+                        className={cn(
+                          "inline-flex min-w-16 items-center justify-center gap-1.5 text-[10px] uppercase font-mono border border-border px-2 py-1 hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:opacity-50",
+                          isClosing && "border-warning text-warning",
+                        )}
                       >
-                        Close
+                        {isClosing && (
+                          <span className="h-2 w-2 animate-spin rounded-full border border-current border-t-transparent" />
+                        )}
+                        {isClosing ? "Closing" : "Close"}
                       </button>
                     </AlertDialogTrigger>
 
@@ -208,9 +234,10 @@ export function PositionsTable({
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
 
                         <AlertDialogAction
+                          disabled={isClosing}
                           onClick={() => handleClosePosition()}
                         >
-                          Confirm
+                          {isClosing ? "Closing" : "Confirm"}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>

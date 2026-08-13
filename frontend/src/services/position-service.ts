@@ -95,6 +95,19 @@ async function syncOpenPositionCount(traderWalletAddress: string) {
   });
 }
 
+function runPositionBackgroundTask(
+  taskName: string,
+  positionId: string,
+  task: () => Promise<void>,
+) {
+  void task().catch((error) => {
+    console.error(`${taskName} failed:`, {
+      positionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
+
 async function syncClosedPositionToChain(
   position,
   options: { throwOnError?: boolean } = {},
@@ -269,7 +282,7 @@ export async function openOrIncreasePosition(data: CreatePositionDTO) {
     });
 
     await syncOpenPositionCount(data.trader_wallet_address);
-    await syncCopiedFollowers(data);
+    scheduleCopiedFollowerSync(createdPosition.position_id, data);
 
     return createdPosition;
   }
@@ -289,19 +302,23 @@ export async function openOrIncreasePosition(data: CreatePositionDTO) {
     leverage: Number(data.leverage),
   });
 
-  await syncCopiedFollowers(data);
+  scheduleCopiedFollowerSync(updatedPosition.position_id, data);
 
   return updatedPosition;
+}
+
+function scheduleCopiedFollowerSync(positionId: string, data: CreatePositionDTO) {
+  if (data.execution_mode !== "COPY") return;
+
+  runPositionBackgroundTask("Copy trading fan-out", positionId, () =>
+    syncCopiedFollowers(data),
+  );
 }
 
 async function syncCopiedFollowers(data: CreatePositionDTO) {
   if (data.execution_mode !== "COPY") return;
 
-  try {
-    await copyMasterPositionToFollowers(data);
-  } catch (error) {
-    console.error("Copy trading fan-out failed:", error);
-  }
+  await copyMasterPositionToFollowers(data);
 }
 
 export async function getOpenPositions(traderWalletAddress: string) {
@@ -321,11 +338,25 @@ export async function closePosition(position: ClosePositionDTO) {
 
   await settleClosedPositionRewards(closedPosition);
   await releaseCopiedMargin(closedPosition);
-  await closeCopiedFollowerPositions(closedPosition);
   await syncOpenPositionCount(position.trader_wallet_address);
-  await syncClosedPositionToChain(closedPosition);
+  scheduleCopiedFollowerClose(closedPosition);
+  scheduleClosedPositionChainSync(closedPosition);
 
   return closedPosition;
+}
+
+function scheduleCopiedFollowerClose(position) {
+  if (position.trade_source !== "MASTER_COPY") return;
+
+  runPositionBackgroundTask("Copy trading follower close", position.position_id, () =>
+    closeCopiedFollowerPositions(position),
+  );
+}
+
+function scheduleClosedPositionChainSync(position) {
+  runPositionBackgroundTask("TradeHistory on-chain sync", position.position_id, () =>
+    syncClosedPositionToChain(position),
+  );
 }
 
 async function closeCopiedFollowerPositions(masterPosition) {

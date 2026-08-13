@@ -45,6 +45,7 @@ export function TradePanel({
   const [manualFreeCollateral, setManualFreeCollateral] = React.useState(0);
   const [copyFreeCollateral, setCopyFreeCollateral] = React.useState(0);
   const [openPositions, setOpenPositions] = React.useState<TraderDashboardPosition[]>([]);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const orderPrice = type === "MARKET" ? midPrice : Number(price);
   const marginAmount = Number(margin);
   const orderQuantity =
@@ -201,6 +202,8 @@ export function TradePanel({
   }, [leverage, orderPrice, quantityInput]);
 
   const placeMarketOrder = async () => {
+    if (isSubmitting) return;
+
     if (!isConnected || !address) {
       toast.error("Wallet not connected");
       return;
@@ -214,6 +217,8 @@ export function TradePanel({
       );
       return;
     }
+
+    setIsSubmitting(true);
 
     try {
       await createPositionApi({
@@ -243,10 +248,14 @@ export function TradePanel({
       toast.error(
         error instanceof Error ? error.message : "Failed to create order",
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const placeLimitOrder = async () => {
+    if (isSubmitting) return;
+
     if (!isConnected || !address) {
       toast.error("Wallet not connected");
       return;
@@ -260,6 +269,8 @@ export function TradePanel({
       );
       return;
     }
+
+    setIsSubmitting(true);
 
     try {
       await createOrderApi({
@@ -291,6 +302,8 @@ export function TradePanel({
       toast.error(
         error instanceof Error ? error.message : "Failed to create order",
       );
+    } finally {
+      setIsSubmitting(false);
     }
 
     // console.log({ price, orderPrice });
@@ -537,16 +550,23 @@ export function TradePanel({
       <button
         data-testid="trade-submit-button"
         onClick={type === "MARKET" ? placeMarketOrder : placeLimitOrder}
-        disabled={!canSubmit}
+        disabled={!canSubmit || isSubmitting}
         className={cn(
-          "w-full py-4 font-medium font-mono uppercase tracking-wider text-sm transition-all",
-          !canSubmit && "cursor-not-allowed opacity-50",
+          "flex w-full items-center justify-center gap-2 py-4 font-medium font-mono uppercase tracking-wider text-sm transition-all",
+          (!canSubmit || isSubmitting) && "cursor-not-allowed opacity-50",
           direction === "BUY"
             ? "bg-success text-white hover:brightness-110"
             : "bg-danger text-white hover:brightness-110",
         )}
       >
-        {direction === "BUY" ? "Place Long Order" : "Place Short Order"}
+        {isSubmitting && (
+          <span className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+        )}
+        {isSubmitting
+          ? "Placing Order"
+          : direction === "BUY"
+            ? "Place Long Order"
+            : "Place Short Order"}
       </button>
     </div>
   );
